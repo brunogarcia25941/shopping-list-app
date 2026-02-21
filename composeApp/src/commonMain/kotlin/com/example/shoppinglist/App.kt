@@ -73,16 +73,47 @@ fun App() {
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = item.name, style = MaterialTheme.typography.titleMedium)
-                            Text(text = "Qtd: ${item.quantity}", style = MaterialTheme.typography.bodyMedium)
+                        // 1. A Checkbox para marcar como comprado
+                        Checkbox(
+                            checked = item.isBought,
+                            onCheckedChange = { isChecked ->
+                                scope.launch {
+                                    try {
+                                        // Cria uma cópia do item com o novo estado
+                                        val updatedItem = item.copy(isBought = isChecked)
+                                        // Envia para o servidor
+                                        client.updateItem(updatedItem)
+                                    } catch (e: Exception) {
+                                        println("Erro ao atualizar: ${e.message}")
+                                    }
+                                }
+                            }
+                        )
+
+                        // 2. Os Textos (Nome e Quantidade)
+                        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                            Text(
+                                text = item.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                // Adiciona o risco por cima do texto se estiver comprado
+                                textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                // Fica um pouco mais transparente se estiver comprado
+                                color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (item.quantity > 1) {
+                                Text(
+                                    text = "Qtd: ${item.quantity}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+
+                        // 3. O Botão de Apagar
                         IconButton(onClick = {
                             scope.launch {
                                 try {
                                     client.deleteItem(item.id)
-                                    // Não precisamos de mexer na lista aqui,
-                                    // porque o servidor vai responder com "REFRESH" e a app atualiza-se sozinha!
                                 } catch (e: Exception) {
                                     println("Erro ao apagar: ${e.message}")
                                 }

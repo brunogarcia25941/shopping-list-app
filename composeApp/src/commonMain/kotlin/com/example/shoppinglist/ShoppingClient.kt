@@ -60,6 +60,14 @@ class ShoppingClient {
         client.delete("http://$host:$port/shopping-list/$id")
     }
 
+    suspend fun updateItem(item: ShoppingItem) {
+        // Envia o pedido PUT com o ID no URL e o item completo no corpo (JSON)
+        client.put("http://$host:$port/shopping-list/${item.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(item)
+        }
+    }
+
     // Esta função devolve um "Flow" (um fluxo contínuo de dados)
     fun listenForUpdates(): Flow<String> = flow {
         try {
