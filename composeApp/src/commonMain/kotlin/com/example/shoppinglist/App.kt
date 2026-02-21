@@ -16,39 +16,74 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 
+
+// ============================================================================
 // 1. A NOSSA NOVA PALETA DE CORES (Premium Dark Blue)
+// ============================================================================
+// Definimos as nossas cores personalizadas usando os códigos HEX.
 val BackgroundNavy = Color(0xFF0B132B)    // Fundo da app (Azul muito escuro)
-val CardSurfaceBlue = Color(0xFF1C2541)   // Fundo dos cartões
-val PrimaryAccent = Color(0xFF5BC0BE)     // Ciano vibrante para botões e vistos
-val TextWhite = Color(0xFFF0F6F6)         // Texto principal
-val TextGray = Color(0xFFA0AAB2)          // Texto secundário (Quantidades)
-val ErrorRed = Color(0xFF8B0000)          // Vermelho escuro para o fundo de apagar
+val CardSurfaceBlue = Color(0xFF1C2541)   // Fundo dos cartões (Um azul ligeiramente mais claro para destacar do fundo)
+val PrimaryAccent = Color(0xFF5BC0BE)     // Ciano vibrante para botões principais e vistos (chama a atenção)
+val TextWhite = Color(0xFFF0F6F6)         // Texto principal (Quase branco, menos agressivo para os olhos)
+val TextGray = Color(0xFFA0AAB2)          // Texto secundário (Usado nas quantidades ou itens já comprados)
+val ErrorRed = Color(0xFF8B0000)          // Vermelho escuro para o fundo do Swipe (Apagar)
 
+// ============================================================================
 // 2. CONFIGURAÇÃO DO TEMA
+// ============================================================================
+// O Material 3 funciona através de um "Color Scheme" (Esquema de cores).
+// Aqui "ensinamos" o Compose a usar as nossas cores nos locais certos por defeito.
 private val ModernDarkBlueScheme = darkColorScheme(
     primary = PrimaryAccent,
     background = BackgroundNavy,
     surface = BackgroundNavy,
     surfaceVariant = CardSurfaceBlue,
-    onPrimary = BackgroundNavy,
-    onBackground = TextWhite,
+    onPrimary = BackgroundNavy,      // Cor da letra/ícone quando está por cima da cor 'primary'
+    onBackground = TextWhite,        // Cor da letra quando está no fundo da app
     onSurface = TextWhite,
     onSurfaceVariant = TextWhite,
     errorContainer = ErrorRed,
     onErrorContainer = Color.White
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+// O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun App() {
+    // ------------------------------------------------------------------------
+    // GESTÃO DE ESTADO (State Management)
+    // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
+    // ------------------------------------------------------------------------
     val client = remember { ShoppingClient() }
+
+    // mutableStateListOf é uma lista especial: se adicionares ou removeres algo, o ecrã atualiza sozinho!
     val items = remember { mutableStateListOf<ShoppingItem>() }
+
+    // Variável que controla se o pop-up de Adicionar está visível (true) ou escondido (false)
     var showDialog by remember { mutableStateOf(false) }
+
+    // O 'scope' serve para podermos lançar rotinas assíncronas (como ir à internet) sem bloquear a interface da app.
     val scope = rememberCoroutineScope()
+
+    // Controlador daquela barra preta que aparece no fundo (Snackbar) com o botão "Desfazer"
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // ------------------------------------------------------------------------
+    // CICLO DE VIDA E WEBSOCKETS
+    // ------------------------------------------------------------------------
+    // O LaunchedEffect(Unit) é o código que corre UMA ÚNICA VEZ quando a App abre.
     LaunchedEffect(Unit) {
+        // 1. Primeiro, tenta ir buscar a lista atualizada à base de dados (Requisição GET)
         try {
             items.clear()
             items.addAll(client.getItems())
@@ -56,12 +91,15 @@ fun App() {
             println("Erro inicial: ${e.message}")
         }
 
+        // 2. Depois, liga o "Túnel" (WebSocket) e fica à escuta para sempre.
+        // O .collect() fica num loop à espera que o servidor mande mensagens.
         client.listenForUpdates().collect { command ->
+            // Se alguém noutro telemóvel adicionar um item, o servidor grita "REFRESH".
             if (command == "REFRESH") {
                 try {
-                    val freshItems = client.getItems()
+                    val freshItems = client.getItems() // Vamos buscar a lista nova
                     items.clear()
-                    items.addAll(freshItems)
+                    items.addAll(freshItems)           // Atualizamos a lista no ecrã
                 } catch (e: Exception) {
                     println("Erro ao recarregar: ${e.message}")
                 }
@@ -69,86 +107,123 @@ fun App() {
         }
     }
 
-    // 3. ENVOLVER A APP NO NOSSO TEMA PERSONALIZADO
+    // ------------------------------------------------------------------------
+    // CONSTRUÇÃO DA INTERFACE (UI)
+    // ------------------------------------------------------------------------
+    // O MaterialTheme aplica o nosso esquema de cores escuro e define o arredondamento (Shapes) global.
     MaterialTheme(
         colorScheme = ModernDarkBlueScheme,
         shapes = Shapes(
             small = RoundedCornerShape(12.dp),
-            medium = RoundedCornerShape(20.dp), // Cartões bastante arredondados
-            large = RoundedCornerShape(24.dp)   // Dialogs arredondados
+            medium = RoundedCornerShape(20.dp), // Define que os Cartões são bastante arredondados
+            large = RoundedCornerShape(24.dp)   // Define que o Pop-up é muito arredondado
         )
     ) {
+        // O Scaffold é o "esqueleto" de uma app clássica. Tem espaços (slots) pré-definidos para o topo, fundo, botões flutuantes, etc.
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(
-                            "Compras em Família",
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryAccent
-                        )
+                        Text("Compras em Família", fontWeight = FontWeight.Bold, color = PrimaryAccent)
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = BackgroundNavy
-                    )
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundNavy)
                 )
             },
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }, // Diz ao Scaffold onde deve desenhar os pop-ups de "Desfazer"
             floatingActionButton = {
                 FloatingActionButton(
-                    onClick = { showDialog = true },
+                    onClick = { showDialog = true }, // Ao clicar, muda a variável para abrir o pop-up
                     containerColor = PrimaryAccent,
                     contentColor = BackgroundNavy,
-                    shape = RoundedCornerShape(50) // Botão 100% circular
+                    shape = RoundedCornerShape(50) // Faz com que o botão seja uma bola perfeita
                 ) {
-                    // ÍCONES ROUNDED EM VEZ DE DEFAULT
                     Icon(Icons.Rounded.Add, contentDescription = "Adicionar", modifier = Modifier.size(28.dp))
                 }
             },
-            containerColor = BackgroundNavy // Fundo geral da app
+            containerColor = BackgroundNavy // Garante que a zona central atrás da lista é escura
         ) { innerPadding ->
 
+            // LazyColumn é a Lista Otimizada. Ao contrário de uma "Column" normal, ela só desenha os itens
+            // que cabem no ecrã. Quando fazes scroll, ela recicla a memória. Essencial para listas grandes!
             LazyColumn(
                 modifier = Modifier.padding(innerPadding).fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp) // Espaço extra entre cartões
+                verticalArrangement = Arrangement.spacedBy(12.dp) // Cria o espaço entre os cartões
             ) {
+                // key = { it.id }: ISTO É MUITO IMPORTANTE!
+                // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
+                // remover, evitando bugs em que apaga o item errado visualmente.
                 items(items, key = { it.id }) { item ->
 
+                    // ----------------------------------------------------------------
+                    // LÓGICA DO SWIPE (Deslizar para apagar)
+                    // ----------------------------------------------------------------
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { dismissValue ->
+                            // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
                             if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
                                 scope.launch {
-                                    var jaDesfez = false
+                                    var jaDesfez = false // Variável de controlo para evitar duplo-clique no Desfazer
                                     try {
+                                        // 1. Limpa pop-ups antigos e manda apagar no servidor
                                         snackbarHostState.currentSnackbarData?.dismiss()
                                         client.deleteItem(item.id)
 
+                                        // 2. Mostra a mensagem e fica à espera de uma ação (Suspende aqui até a mensagem fechar)
                                         val result = snackbarHostState.showSnackbar(
                                             message = "${item.name} apagado",
                                             actionLabel = "Desfazer",
                                             duration = SnackbarDuration.Short
                                         )
 
+                                        // 3. Se o utilizador clicou no botão "Desfazer" e ainda não tinha clicado
                                         if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
                                             jaDesfez = true
-                                            snackbarHostState.currentSnackbarData?.dismiss()
+                                            snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
+
+                                            // Voltamos a adicionar o item ao servidor usando uma cópia com ID limpo (para gerar um novo)
                                             client.addItem(item.copy(id = ""))
                                         }
                                     } catch (e: Exception) {
                                         println("Erro: ${e.message}")
                                     }
                                 }
-                                true
+                                true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
                             } else {
-                                false
+                                false // Se deslizar para o lado errado, volta a colocar o cartão no sítio
                             }
                         }
                     )
 
+                    // ----------------------------------------------------------------
+                    // ANIMAÇÕES DE COR E TRANSPARÊNCIA (State-driven Animations)
+                    // Estas variáveis ficam "à escuta" do estado (isBought). Se o estado mudar,
+                    // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
+                    // ----------------------------------------------------------------
+                    val animatedCardColor by animateColorAsState(
+                        targetValue = if (item.isBought) BackgroundNavy else CardSurfaceBlue,
+                        animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
+                    )
+
+                    val animatedAlpha by animateFloatAsState(
+                        targetValue = if (item.isBought) 0.4f else 1f, // 0.4f = 40% opaco (bastante transparente)
+                        animationSpec = tween(durationMillis = 500)
+                    )
+
+                    // Animação para o ícone do lixo crescer.
+                    // Só cresce se a direção do "puxão" tiver ultrapassado o limite (isDismissing == true)
+                    val isDismissing = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
+                    val trashScale by animateFloatAsState(
+                        targetValue = if (isDismissing) 1.5f else 1f, // Cresce 50%
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy) // Efeito mola (dá um pequeno salto)
+                    )
+
+                    // O contentor que permite o deslize
                     SwipeToDismissBox(
                         state = dismissState,
+                        modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
                         backgroundContent = {
+                            // Fundo vermelho que aparece por trás ao deslizar
                             val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
                                 MaterialTheme.colorScheme.errorContainer
                             else
@@ -157,55 +232,81 @@ fun App() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    // O fundo do Swipe tem de ter o mesmo arredondamento do cartão
                                     .background(color, RoundedCornerShape(20.dp)),
-                                contentAlignment = Alignment.CenterEnd
+                                contentAlignment = Alignment.CenterEnd // Encosta o lixo à direita
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Delete, // Ícone arredondado
+                                    imageVector = Icons.Rounded.Delete,
                                     contentDescription = "Apagar",
                                     tint = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.padding(end = 24.dp).size(28.dp)
+                                    modifier = Modifier.padding(end = 24.dp).size(28.dp).scale(trashScale) // Aplica aqui a animação de tamanho do lixo
                                 )
                             }
                         },
                         content = {
-                            // CARTÃO COM EFEITOS
+                            // CARTÃO VISUAL PRINCIPAL DO ITEM
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = CardSurfaceBlue),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp) // Sombra/Efeito de flutuação
+                                colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
+                                // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
+                                elevation = CardDefaults.cardElevation(defaultElevation = if (item.isBought) 0.dp else 8.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Checkbox(
-                                        checked = item.isBought,
-                                        onCheckedChange = { isChecked ->
-                                            scope.launch {
-                                                client.updateItem(item.copy(isBought = isChecked))
-                                            }
-                                        },
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = PrimaryAccent,
-                                            checkmarkColor = BackgroundNavy
+
+                                    // ------------------------------------------------------------
+                                    // O NOSSO "VISTO" ANIMADO PERSONALIZADO
+                                    // ------------------------------------------------------------
+                                    val checkScale by animateFloatAsState(
+                                        targetValue = if (item.isBought) 1.2f else 1f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioHighBouncy, // Mola muito elástica
+                                            stiffness = Spring.StiffnessMedium
                                         )
                                     )
+                                    val checkColor by animateColorAsState(
+                                        targetValue = if (item.isBought) PrimaryAccent else TextGray
+                                    )
 
+                                    // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape) // Garante que a área de clique é um círculo
+                                            .clickable {
+                                                // Ao clicar, envia para o servidor a ordem para inverter o estado (!item.isBought)
+                                                scope.launch {
+                                                    client.updateItem(item.copy(isBought = !item.isBought))
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            // Se comprado mostra Visto, se não, mostra Círculo Vazio
+                                            imageVector = if (item.isBought) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                            contentDescription = "Comprado",
+                                            tint = checkColor, // Cor animada
+                                            modifier = Modifier.scale(checkScale).size(28.dp) // Tamanho animado
+                                        )
+                                    }
+
+                                    // TEXTOS (Nome e Quantidade)
                                     Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                                         Text(
                                             text = item.name,
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            // Aplica o "risco" por cima da palavra se estiver comprado
                                             textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                            color = if (item.isBought) TextGray else TextWhite
+                                            color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
                                         )
                                         if (item.quantity > 1) {
                                             Text(
                                                 text = "Qtd: ${item.quantity}",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = TextGray
+                                                color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
                                             )
                                         }
                                     }
@@ -217,15 +318,17 @@ fun App() {
             }
         }
 
+        // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
         if (showDialog) {
             AddItemDialog(
-                onDismiss = { showDialog = false },
+                onDismiss = { showDialog = false }, // Fecha se o utilizador clicar fora ou no cancelar
                 onConfirm = { name, quantity ->
                     scope.launch {
+                        // Converte o texto da quantidade para número (se falhar ou estiver vazio, assume 1)
                         val newItem = ShoppingItem(name = name, quantity = quantity.toIntOrNull() ?: 1)
                         try {
-                            client.addItem(newItem)
-                            showDialog = false
+                            client.addItem(newItem) // Envia para o servidor
+                            showDialog = false      // Fecha o pop-up logo a seguir
                         } catch (e: Exception) {
                             println("Erro: ${e.message}")
                         }
@@ -236,22 +339,27 @@ fun App() {
     }
 }
 
+// ============================================================================
+// COMPONENTE EXTRA: O Pop-up (Dialog) de Adicionar Item
+// ============================================================================
 @Composable
 fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
+    // Estas variáveis guardam o que o utilizador está a escrever nos campos de texto em tempo real
     var name by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = CardSurfaceBlue, // Fundo do pop-up
+        containerColor = CardSurfaceBlue,
         titleContentColor = PrimaryAccent,
         textContentColor = TextWhite,
         title = { Text("Novo Item", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Campo de Texto para o Nome
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it }, // Atualiza a variável 'name' sempre que escreves uma letra
                     label = { Text("Nome (ex: Arroz)") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
@@ -261,9 +369,10 @@ fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
+                // Campo de Texto para a Quantidade
                 OutlinedTextField(
                     value = quantity,
-                    onValueChange = { quantity = it },
+                    onValueChange = { quantity = it }, // Atualiza a variável 'quantity'
                     label = { Text("Quantidade") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
@@ -277,16 +386,16 @@ fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name, quantity) },
+                onClick = { onConfirm(name, quantity) }, // Dispara o evento de confirmação passando os textos
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
-                shape = RoundedCornerShape(50) // Botão redondo
+                shape = RoundedCornerShape(50)
             ) {
                 Text("Adicionar", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(
-                onClick = onDismiss,
+                onClick = onDismiss, // Dispara o evento para fechar
                 colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
             ) {
                 Text("Cancelar")
