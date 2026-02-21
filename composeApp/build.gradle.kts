@@ -51,6 +51,8 @@ kotlin {
             // Coroutines (para o tempo real)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
             implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+
+            implementation("com.russhwolf:multiplatform-settings-no-arg:1.1.1")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

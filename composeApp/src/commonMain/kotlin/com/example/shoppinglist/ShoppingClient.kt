@@ -25,58 +25,49 @@ data class ShoppingItem(
     val familyCode: String = ""
 )
 
-class ShoppingClient (private val familyCode: String) {
-    // O IP Mágico (10.0.2.2 para emulador, localhost para PC/iOS Simulator)
-    // para testar no telemóvel físico, pôr aqui o IP do PC (ex: 192.168.1.5)
-    private val host = "10.0.2.2"
-    private val port = 8080
+class ShoppingClient(private val familyCode: String) {
+
+    // 1. COLOCA AQUI O TEU LINK DO NGROK (Sem a barra / no fim)
+    // Exemplo: "https://1234-abcd-5678.ngrok-free.app"
+    private val baseUrl = "https://unpalatal-apocrine-shira.ngrok-free.dev"
+
+    // 2. Prepara o link do WebSocket (Troca 'https' por 'wss')
+    private val wsUrl = baseUrl.replace("https://", "wss://")
 
     private val client = HttpClient {
         install(ContentNegotiation) {
-            json(Json {
-                prettyPrint = true
-                ignoreUnknownKeys = true
-            })
+            json()
         }
-        // 2. Instalar o plugin de WebSockets no Cliente
-        install(WebSockets) {
-            contentConverter = KotlinxWebsocketSerializationConverter(Json {
-                ignoreUnknownKeys = true
-            })
-        }
+        install(WebSockets)
     }
 
     suspend fun getItems(): List<ShoppingItem> {
-        return client.get("http://$host:$port/shopping-list/$familyCode").body()
+        return client.get("$baseUrl/shopping-list/$familyCode").body()
     }
 
     suspend fun addItem(item: ShoppingItem) {
-        client.post("http://$host:$port/shopping-list/$familyCode") {
+        client.post("$baseUrl/shopping-list/$familyCode") {
+            contentType(ContentType.Application.Json)
+            setBody(item)
+        }
+    }
+
+    suspend fun updateItem(item: ShoppingItem) {
+        client.put("$baseUrl/shopping-list/$familyCode/${item.id}") {
             contentType(ContentType.Application.Json)
             setBody(item)
         }
     }
 
     suspend fun deleteItem(id: String) {
-        client.delete("http://$host:$port/shopping-list/$familyCode/$id")
+        client.delete("$baseUrl/shopping-list/$familyCode/$id")
     }
 
-    suspend fun updateItem(item: ShoppingItem) {
-        // Envia o pedido PUT com o ID no URL e o item completo no corpo (JSON)
-        client.put("http://$host:$port/shopping-list/$familyCode/${item.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(item)
-        }
-    }
-
-    // Esta função devolve um "Flow" (um fluxo contínuo de dados)
+    // A chamada do WebSocket fica muito mais simples de escrever assim:
     fun listenForUpdates(): Flow<String> = flow {
         try {
-            // Conecta ao endpoint criado no servidor
-            client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/shopping-list/$familyCode/updates") {
-                // Fica num loop à espera de mensagens
+            client.webSocket("$wsUrl/shopping-list/$familyCode/updates") {
                 while (true) {
-                    // Lemos o texto que o servidor mandou
                     val message = (incoming.receive() as? io.ktor.websocket.Frame.Text)?.readText()
                     if (message != null) {
                         emit(message)

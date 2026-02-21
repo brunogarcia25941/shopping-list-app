@@ -26,6 +26,8 @@ import androidx.compose.material.icons.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.set
 
 
 // ============================================================================
@@ -42,10 +44,15 @@ val ErrorRed = Color(0xFF8B0000)          // Vermelho escuro para o fundo do Swi
 
 @Composable
 fun App() {
-    // Esta variável guarda o código da família. Se estiver vazia, significa que não fez login.
-    var loggedFamilyCode by remember { mutableStateOf("") }
+    // 1. Inicializa a "memória do telemóvel"
+    val settings = remember { Settings() }
 
-    // Envolvemos toda a app no nosso tema escuro
+    // 2. Em vez de começar vazio, vai procurar à memória se já existe o "FAMILY_CODE".
+    // Se não existir, devolve "" (vazio).
+    var loggedFamilyCode by remember {
+        mutableStateOf(settings.getString("FAMILY_CODE", ""))
+    }
+
     MaterialTheme(
         colorScheme = ModernDarkBlueScheme,
         shapes = Shapes(
@@ -54,19 +61,24 @@ fun App() {
             large = RoundedCornerShape(24.dp)
         )
     ) {
-        // Lógica de Navegação Simples:
         if (loggedFamilyCode.isEmpty()) {
-            // Se não tem código, mostra o ecrã de Login
             LoginScreen(
                 onEnter = { code ->
-                    loggedFamilyCode = code // Atualiza a variável com o código digitado
+                    // 3. Atualiza o ecrã
+                    loggedFamilyCode = code
+                    // 4. GUARDA NA MEMÓRIA para a próxima vez que a app abrir!
+                    settings.putString("FAMILY_CODE", code)
                 }
             )
         } else {
-            // Se tem código, mostra a lista e passa o código
             ShoppingListScreen(
                 familyCode = loggedFamilyCode,
-                onLogout = { loggedFamilyCode = "" } // Ao sair, limpa o código (volta ao Login)
+                onLogout = {
+                    // 5. APAGA DA MEMÓRIA para poder trocar de família
+                    settings.remove("FAMILY_CODE")
+                    // 6. Atualiza o ecrã (volta ao Login)
+                    loggedFamilyCode = ""
+                }
             )
         }
     }
@@ -163,6 +175,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
 
     // Variável que controla se o pop-up de Adicionar está visível (true) ou escondido (false)
     var showDialog by remember { mutableStateOf(false) }
+
+    // Guarda o item que estamos a editar no momento. Se for null, não estamos a editar nada.
+    var itemToEdit by remember { mutableStateOf<ShoppingItem?>(null) }
 
     // O 'scope' serve para podermos lançar rotinas assíncronas (como ir à internet) sem bloquear a interface da app.
     val scope = rememberCoroutineScope()
@@ -363,19 +378,28 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                                     )
                                 }
                                 // TEXTOS (Nome e Quantidade)
-                                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 8.dp)
+                                        .clip(RoundedCornerShape(8.dp)) // Para o efeito de clique ser redondinho
+                                        .clickable {
+                                            itemToEdit = item // Ao clicar, dizemos à app qual é o item a editar!
+                                        }
+                                        .padding(8.dp)
+                                ) {
                                     Text(
                                         text = item.name,
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        // Aplica o "risco" por cima da palavra se estiver comprado
                                         textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                        color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
+                                        color = TextWhite.copy(alpha = animatedAlpha)
                                     )
                                     if (item.quantity > 1) {
                                         Text(
                                             text = "Qtd: ${item.quantity}",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
+                                            color = TextWhite.copy(alpha = animatedAlpha)
                                         )
                                     }
                                 }
@@ -387,24 +411,49 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
         }
     }
 
-        // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
-        if (showDialog) {
-            AddItemDialog(
-                onDismiss = { showDialog = false }, // Fecha se o utilizador clicar fora ou no cancelar
-                onConfirm = { name, quantity ->
-                    scope.launch {
-                        // Converte o texto da quantidade para número (se falhar ou estiver vazio, assume 1)
-                        val newItem = ShoppingItem(name = name, quantity = quantity.toIntOrNull() ?: 1)
-                        try {
-                            client.addItem(newItem) // Envia para o servidor
-                            showDialog = false      // Fecha o pop-up logo a seguir
-                        } catch (e: Exception) {
-                            println("Erro: ${e.message}")
-                        }
+    // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
+    if (showDialog) {
+        AddItemDialog(
+            onDismiss = { showDialog = false }, // Fecha se o utilizador clicar fora ou no cancelar
+            onConfirm = { name, quantity ->
+                scope.launch {
+                    // Converte o texto da quantidade para número (se falhar ou estiver vazio, assume 1)
+                    val newItem = ShoppingItem(name = name, quantity = quantity.toIntOrNull() ?: 1)
+                    try {
+                        client.addItem(newItem) // Envia para o servidor
+                        showDialog = false      // Fecha o pop-up logo a seguir
+                    } catch (e: Exception) {
+                        println("Erro: ${e.message}")
                     }
                 }
-            )
-        }
+            }
+        )
+    }
+
+    // Se houver um item selecionado para editar, mostra o pop-up de edição
+    itemToEdit?.let { item ->
+        EditItemDialog(
+            item = item,
+            onDismiss = { itemToEdit = null }, // Fecha o pop-up
+            onConfirm = { novoNome, novaQuantidade ->
+                scope.launch {
+                    try {
+                        // Cria uma cópia do item com o nome e quantidade novos
+                        val updatedItem = item.copy(
+                            name = novoNome,
+                            quantity = novaQuantidade.toIntOrNull() ?: 1
+                        )
+                        client.updateItem(updatedItem) // Envia para o servidor
+                        itemToEdit = null              // Fecha o pop-up
+                    } catch (e: Exception) {
+                        println("Erro ao editar: ${e.message}")
+                    }
+                }
+            }
+        )
+    }
+
+
 }
 
 // ============================================================================
@@ -464,6 +513,70 @@ fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
         dismissButton = {
             TextButton(
                 onClick = onDismiss, // Dispara o evento para fechar
+                colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
+            ) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditItemDialog(
+    item: ShoppingItem,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    // Ao contrário do AddItem, aqui as variáveis já começam preenchidas com os valores do item!
+    var name by remember { mutableStateOf(item.name) }
+    var quantity by remember { mutableStateOf(item.quantity.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardSurfaceBlue,
+        titleContentColor = PrimaryAccent,
+        textContentColor = TextWhite,
+        title = { Text("Editar Item", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nome") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent,
+                        unfocusedTextColor = TextWhite,
+                        focusedTextColor = TextWhite
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { quantity = it },
+                    label = { Text("Quantidade") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent,
+                        unfocusedTextColor = TextWhite,
+                        focusedTextColor = TextWhite
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name, quantity) },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text("Guardar", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
                 colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
             ) {
                 Text("Cancelar")
