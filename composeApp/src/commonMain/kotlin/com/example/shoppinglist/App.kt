@@ -22,6 +22,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -37,6 +38,97 @@ val PrimaryAccent = Color(0xFF5BC0BE)     // Ciano vibrante para botões princip
 val TextWhite = Color(0xFFF0F6F6)         // Texto principal (Quase branco, menos agressivo para os olhos)
 val TextGray = Color(0xFFA0AAB2)          // Texto secundário (Usado nas quantidades ou itens já comprados)
 val ErrorRed = Color(0xFF8B0000)          // Vermelho escuro para o fundo do Swipe (Apagar)
+
+
+@Composable
+fun App() {
+    // Esta variável guarda o código da família. Se estiver vazia, significa que não fez login.
+    var loggedFamilyCode by remember { mutableStateOf("") }
+
+    // Envolvemos toda a app no nosso tema escuro
+    MaterialTheme(
+        colorScheme = ModernDarkBlueScheme,
+        shapes = Shapes(
+            small = RoundedCornerShape(12.dp),
+            medium = RoundedCornerShape(20.dp),
+            large = RoundedCornerShape(24.dp)
+        )
+    ) {
+        // Lógica de Navegação Simples:
+        if (loggedFamilyCode.isEmpty()) {
+            // Se não tem código, mostra o ecrã de Login
+            LoginScreen(
+                onEnter = { code ->
+                    loggedFamilyCode = code // Atualiza a variável com o código digitado
+                }
+            )
+        } else {
+            // Se tem código, mostra a lista e passa o código
+            ShoppingListScreen(
+                familyCode = loggedFamilyCode,
+                onLogout = { loggedFamilyCode = "" } // Ao sair, limpa o código (volta ao Login)
+            )
+        }
+    }
+}
+
+@Composable
+fun LoginScreen(onEnter: (String) -> Unit) {
+    var codeInput by remember { mutableStateOf("") }
+
+    // Ecrã centrado
+    Box(
+        modifier = Modifier.fillMaxSize().background(BackgroundNavy),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.padding(24.dp).fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = CardSurfaceBlue)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Bem-vindo",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = PrimaryAccent,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Insere o código da tua família para entrares na lista partilhada.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextGray
+                )
+
+                OutlinedTextField(
+                    value = codeInput,
+                    onValueChange = { codeInput = it.uppercase() }, // Força a ficar tudo em maiúsculas
+                    label = { Text("Código da Casa") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent,
+                        unfocusedTextColor = TextWhite,
+                        focusedTextColor = TextWhite
+                    ),
+                    singleLine = true
+                )
+
+                Button(
+                    onClick = {
+                        if (codeInput.isNotBlank()) onEnter(codeInput)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy)
+                ) {
+                    Text("Entrar", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
 
 // ============================================================================
 // 2. CONFIGURAÇÃO DO TEMA
@@ -59,12 +151,12 @@ private val ModernDarkBlueScheme = darkColorScheme(
 // O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun App() {
+fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // ------------------------------------------------------------------------
     // GESTÃO DE ESTADO (State Management)
     // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
     // ------------------------------------------------------------------------
-    val client = remember { ShoppingClient() }
+    val client = remember { ShoppingClient(familyCode) }
 
     // mutableStateListOf é uma lista especial: se adicionares ou removeres algo, o ecrã atualiza sozinho!
     val items = remember { mutableStateListOf<ShoppingItem>() }
@@ -110,213 +202,190 @@ fun App() {
     // ------------------------------------------------------------------------
     // CONSTRUÇÃO DA INTERFACE (UI)
     // ------------------------------------------------------------------------
-    // O MaterialTheme aplica o nosso esquema de cores escuro e define o arredondamento (Shapes) global.
-    MaterialTheme(
-        colorScheme = ModernDarkBlueScheme,
-        shapes = Shapes(
-            small = RoundedCornerShape(12.dp),
-            medium = RoundedCornerShape(20.dp), // Define que os Cartões são bastante arredondados
-            large = RoundedCornerShape(24.dp)   // Define que o Pop-up é muito arredondado
-        )
-    ) {
-        // O Scaffold é o "esqueleto" de uma app clássica. Tem espaços (slots) pré-definidos para o topo, fundo, botões flutuantes, etc.
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text("Compras em Família", fontWeight = FontWeight.Bold, color = PrimaryAccent)
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundNavy)
-                )
-            },
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }, // Diz ao Scaffold onde deve desenhar os pop-ups de "Desfazer"
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { showDialog = true }, // Ao clicar, muda a variável para abrir o pop-up
-                    containerColor = PrimaryAccent,
-                    contentColor = BackgroundNavy,
-                    shape = RoundedCornerShape(50) // Faz com que o botão seja uma bola perfeita
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = "Adicionar", modifier = Modifier.size(28.dp))
+    // O Scaffold é o "esqueleto" de uma app clássica. Tem espaços (slots) pré-definidos para o topo, fundo, botões flutuantes, etc.
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Casa: $familyCode", fontWeight = FontWeight.Bold, color = PrimaryAccent) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundNavy),
+                actions = {
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = PrimaryAccent)
+                    }
                 }
-            },
-            containerColor = BackgroundNavy // Garante que a zona central atrás da lista é escura
-        ) { innerPadding ->
-
-            // LazyColumn é a Lista Otimizada. Ao contrário de uma "Column" normal, ela só desenha os itens
-            // que cabem no ecrã. Quando fazes scroll, ela recicla a memória. Essencial para listas grandes!
-            LazyColumn(
-                modifier = Modifier.padding(innerPadding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp) // Cria o espaço entre os cartões
+            ) },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }, // Diz ao Scaffold onde deve desenhar os pop-ups de "Desfazer"
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showDialog = true }, // Ao clicar, muda a variável para abrir o pop-up
+                containerColor = PrimaryAccent,
+                contentColor = BackgroundNavy,
+                shape = RoundedCornerShape(50) // Faz com que o botão seja uma bola perfeita
             ) {
-                // key = { it.id }: ISTO É MUITO IMPORTANTE!
-                // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
-                // remover, evitando bugs em que apaga o item errado visualmente.
-                items(items, key = { it.id }) { item ->
-
-                    // ----------------------------------------------------------------
-                    // LÓGICA DO SWIPE (Deslizar para apagar)
-                    // ----------------------------------------------------------------
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { dismissValue ->
-                            // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
-                            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                scope.launch {
-                                    var jaDesfez = false // Variável de controlo para evitar duplo-clique no Desfazer
-                                    try {
-                                        // 1. Limpa pop-ups antigos e manda apagar no servidor
-                                        snackbarHostState.currentSnackbarData?.dismiss()
-                                        client.deleteItem(item.id)
-
-                                        // 2. Mostra a mensagem e fica à espera de uma ação (Suspende aqui até a mensagem fechar)
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "${item.name} apagado",
-                                            actionLabel = "Desfazer",
-                                            duration = SnackbarDuration.Short
-                                        )
-
-                                        // 3. Se o utilizador clicou no botão "Desfazer" e ainda não tinha clicado
-                                        if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
-                                            jaDesfez = true
-                                            snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
-
-                                            // Voltamos a adicionar o item ao servidor usando uma cópia com ID limpo (para gerar um novo)
-                                            client.addItem(item.copy(id = ""))
-                                        }
-                                    } catch (e: Exception) {
-                                        println("Erro: ${e.message}")
+                Icon(Icons.Rounded.Add, contentDescription = "Adicionar", modifier = Modifier.size(28.dp))
+            } },
+        containerColor = BackgroundNavy // Garante que a zona central atrás da lista é escura
+    ) { innerPadding ->
+        // LazyColumn é a Lista Otimizada. Ao contrário de uma "Column" normal, ela só desenha os itens
+        // que cabem no ecrã. Quando fazes scroll, ela recicla a memória. Essencial para listas grandes!
+        LazyColumn(
+            modifier = Modifier.padding(innerPadding).fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp) // Cria o espaço entre os cartões
+        ) {
+            // key = { it.id }: ISTO É MUITO IMPORTANTE!
+            // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
+            // remover, evitando bugs em que apaga o item errado visualmente.
+            items(items, key = { it.id }) { item ->
+                // ----------------------------------------------------------------
+                // LÓGICA DO SWIPE (Deslizar para apagar)
+                // ----------------------------------------------------------------
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { dismissValue ->
+                        // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
+                        if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                            scope.launch {
+                                var jaDesfez = false // Variável de controlo para evitar duplo-clique no Desfazer
+                                try {
+                                    // 1. Limpa pop-ups antigos e manda apagar no servidor
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                    client.deleteItem(item.id)
+                                    // 2. Mostra a mensagem e fica à espera de uma ação (Suspende aqui até a mensagem fechar)
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = "${item.name} apagado",
+                                        actionLabel = "Desfazer",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    // 3. Se o utilizador clicou no botão "Desfazer" e ainda não tinha clicado
+                                    if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
+                                        jaDesfez = true
+                                        snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
+                                        // Voltamos a adicionar o item ao servidor usando uma cópia com ID limpo (para gerar um novo)
+                                        client.addItem(item.copy(id = ""))
                                     }
+                                } catch (e: Exception) {
+                                    println("Erro: ${e.message}")
                                 }
-                                true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
-                            } else {
-                                false // Se deslizar para o lado errado, volta a colocar o cartão no sítio
                             }
+                            true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
+                        } else {
+                            false // Se deslizar para o lado errado, volta a colocar o cartão no sítio
                         }
-                    )
-
-                    // ----------------------------------------------------------------
-                    // ANIMAÇÕES DE COR E TRANSPARÊNCIA (State-driven Animations)
-                    // Estas variáveis ficam "à escuta" do estado (isBought). Se o estado mudar,
-                    // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
-                    // ----------------------------------------------------------------
-                    val animatedCardColor by animateColorAsState(
-                        targetValue = if (item.isBought) BackgroundNavy else CardSurfaceBlue,
-                        animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
-                    )
-
-                    val animatedAlpha by animateFloatAsState(
-                        targetValue = if (item.isBought) 0.4f else 1f, // 0.4f = 40% opaco (bastante transparente)
-                        animationSpec = tween(durationMillis = 500)
-                    )
-
-                    // Animação para o ícone do lixo crescer.
-                    // Só cresce se a direção do "puxão" tiver ultrapassado o limite (isDismissing == true)
-                    val isDismissing = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
-                    val trashScale by animateFloatAsState(
-                        targetValue = if (isDismissing) 1.5f else 1f, // Cresce 50%
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy) // Efeito mola (dá um pequeno salto)
-                    )
-
-                    // O contentor que permite o deslize
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
-                        backgroundContent = {
-                            // Fundo vermelho que aparece por trás ao deslizar
-                            val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
-                                MaterialTheme.colorScheme.errorContainer
-                            else
-                                Color.Transparent
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(color, RoundedCornerShape(20.dp)),
-                                contentAlignment = Alignment.CenterEnd // Encosta o lixo à direita
+                    }
+                )
+                // ----------------------------------------------------------------
+                // ANIMAÇÕES DE COR E TRANSPARÊNCIA (State-driven Animations)
+                // Estas variáveis ficam "à escuta" do estado (isBought). Se o estado mudar,
+                // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
+                // ----------------------------------------------------------------
+                val animatedCardColor by animateColorAsState(
+                    targetValue = if (item.isBought) BackgroundNavy else CardSurfaceBlue,
+                    animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
+                )
+                val animatedAlpha by animateFloatAsState(
+                    targetValue = if (item.isBought) 0.4f else 1f, // 0.4f = 40% opaco (bastante transparente)
+                    animationSpec = tween(durationMillis = 500)
+                )
+                // Animação para o ícone do lixo crescer.
+                // Só cresce se a direção do "puxão" tiver ultrapassado o limite (isDismissing == true)
+                val isDismissing = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
+                val trashScale by animateFloatAsState(
+                    targetValue = if (isDismissing) 1.5f else 1f, // Cresce 50%
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy) // Efeito mola (dá um pequeno salto)
+                )
+                // O contentor que permite o deslize
+                SwipeToDismissBox(
+                    state = dismissState,
+                    modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
+                    backgroundContent = {
+                        // Fundo vermelho que aparece por trás ao deslizar
+                        val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
+                            MaterialTheme.colorScheme.errorContainer
+                        else
+                            Color.Transparent
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(color, RoundedCornerShape(20.dp)),
+                            contentAlignment = Alignment.CenterEnd // Encosta o lixo à direita
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "Apagar",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(end = 24.dp).size(28.dp).scale(trashScale) // Aplica aqui a animação de tamanho do lixo
+                            )
+                        } },
+                    content = {
+                        // CARTÃO VISUAL PRINCIPAL DO ITEM
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
+                            // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = if (item.isBought) 0.dp else 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Delete,
-                                    contentDescription = "Apagar",
-                                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.padding(end = 24.dp).size(28.dp).scale(trashScale) // Aplica aqui a animação de tamanho do lixo
+                                // ------------------------------------------------------------
+                                // O NOSSO "VISTO" ANIMADO PERSONALIZADO
+                                // ------------------------------------------------------------
+                                val checkScale by animateFloatAsState(
+                                    targetValue = if (item.isBought) 1.2f else 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioHighBouncy, // Mola muito elástica
+                                        stiffness = Spring.StiffnessMedium
+                                    )
                                 )
-                            }
-                        },
-                        content = {
-                            // CARTÃO VISUAL PRINCIPAL DO ITEM
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
-                                // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
-                                elevation = CardDefaults.cardElevation(defaultElevation = if (item.isBought) 0.dp else 8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                val checkColor by animateColorAsState(
+                                    targetValue = if (item.isBought) PrimaryAccent else TextGray
+                                )
+                                // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape) // Garante que a área de clique é um círculo
+                                        .clickable {
+                                            // Ao clicar, envia para o servidor a ordem para inverter o estado (!item.isBought)
+                                            scope.launch {
+                                                client.updateItem(item.copy(isBought = !item.isBought))
+                                            } },
+                                    contentAlignment = Alignment.Center
                                 ) {
-
-                                    // ------------------------------------------------------------
-                                    // O NOSSO "VISTO" ANIMADO PERSONALIZADO
-                                    // ------------------------------------------------------------
-                                    val checkScale by animateFloatAsState(
-                                        targetValue = if (item.isBought) 1.2f else 1f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioHighBouncy, // Mola muito elástica
-                                            stiffness = Spring.StiffnessMedium
-                                        )
+                                    Icon(
+                                        // Se comprado mostra Visto, se não, mostra Círculo Vazio
+                                        imageVector = if (item.isBought) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                        contentDescription = "Comprado",
+                                        tint = checkColor, // Cor animada
+                                        modifier = Modifier.scale(checkScale).size(28.dp) // Tamanho animado
                                     )
-                                    val checkColor by animateColorAsState(
-                                        targetValue = if (item.isBought) PrimaryAccent else TextGray
+                                }
+                                // TEXTOS (Nome e Quantidade)
+                                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                                    Text(
+                                        text = item.name,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        // Aplica o "risco" por cima da palavra se estiver comprado
+                                        textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                        color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
                                     )
-
-                                    // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape) // Garante que a área de clique é um círculo
-                                            .clickable {
-                                                // Ao clicar, envia para o servidor a ordem para inverter o estado (!item.isBought)
-                                                scope.launch {
-                                                    client.updateItem(item.copy(isBought = !item.isBought))
-                                                }
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            // Se comprado mostra Visto, se não, mostra Círculo Vazio
-                                            imageVector = if (item.isBought) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-                                            contentDescription = "Comprado",
-                                            tint = checkColor, // Cor animada
-                                            modifier = Modifier.scale(checkScale).size(28.dp) // Tamanho animado
-                                        )
-                                    }
-
-                                    // TEXTOS (Nome e Quantidade)
-                                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                                    if (item.quantity > 1) {
                                         Text(
-                                            text = item.name,
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            // Aplica o "risco" por cima da palavra se estiver comprado
-                                            textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                            text = "Qtd: ${item.quantity}",
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
                                         )
-                                        if (item.quantity > 1) {
-                                            Text(
-                                                text = "Qtd: ${item.quantity}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = TextWhite.copy(alpha = animatedAlpha) // Transparência animada
-                                            )
-                                        }
                                     }
                                 }
                             }
                         }
-                    )
-                }
+                    }
+                )
             }
         }
+    }
 
         // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
         if (showDialog) {
@@ -336,7 +405,6 @@ fun App() {
                 }
             )
         }
-    }
 }
 
 // ============================================================================

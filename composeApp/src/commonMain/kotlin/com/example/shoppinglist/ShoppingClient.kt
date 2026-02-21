@@ -21,10 +21,11 @@ data class ShoppingItem(
     val name: String,
     val quantity: Int,
     val isBought: Boolean = false,
-    val category: String = "Geral"
+    val category: String = "Geral",
+    val familyCode: String = ""
 )
 
-class ShoppingClient {
+class ShoppingClient (private val familyCode: String) {
     // O IP Mágico (10.0.2.2 para emulador, localhost para PC/iOS Simulator)
     // para testar no telemóvel físico, pôr aqui o IP do PC (ex: 192.168.1.5)
     private val host = "10.0.2.2"
@@ -46,23 +47,23 @@ class ShoppingClient {
     }
 
     suspend fun getItems(): List<ShoppingItem> {
-        return client.get("http://$host:$port/shopping-list").body()
+        return client.get("http://$host:$port/shopping-list/$familyCode").body()
     }
 
     suspend fun addItem(item: ShoppingItem) {
-        client.post("http://$host:$port/shopping-list") {
+        client.post("http://$host:$port/shopping-list/$familyCode") {
             contentType(ContentType.Application.Json)
             setBody(item)
         }
     }
 
     suspend fun deleteItem(id: String) {
-        client.delete("http://$host:$port/shopping-list/$id")
+        client.delete("http://$host:$port/shopping-list/$familyCode/$id")
     }
 
     suspend fun updateItem(item: ShoppingItem) {
         // Envia o pedido PUT com o ID no URL e o item completo no corpo (JSON)
-        client.put("http://$host:$port/shopping-list/${item.id}") {
+        client.put("http://$host:$port/shopping-list/$familyCode/${item.id}") {
             contentType(ContentType.Application.Json)
             setBody(item)
         }
@@ -72,7 +73,7 @@ class ShoppingClient {
     fun listenForUpdates(): Flow<String> = flow {
         try {
             // Conecta ao endpoint criado no servidor
-            client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/shopping-list/updates") {
+            client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/shopping-list/$familyCode/updates") {
                 // Fica num loop à espera de mensagens
                 while (true) {
                     // Lemos o texto que o servidor mandou
