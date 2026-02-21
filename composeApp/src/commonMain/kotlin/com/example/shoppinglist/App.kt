@@ -1,5 +1,6 @@
 package com.example.shoppinglist
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,9 @@ fun App() {
     val items = remember { mutableStateListOf<ShoppingItem>() }
     var showDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // NOVO: O controlador da Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // 1. Carregar lista inicial E ligar o WebSocket
     LaunchedEffect(Unit) {
@@ -46,10 +50,15 @@ fun App() {
             }
         }
     }
+
     // 3. Estrutura Visual (Material 3)
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Lista de Compras") })
+        },
+        // NOVO: Adicionamos a SnackbarHost ao Scaffold para ele saber onde a desenhar
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showDialog = true }) {
@@ -63,66 +72,115 @@ fun App() {
             modifier = Modifier.padding(innerPadding).fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
-            items(items.size) { index ->
-                val item = items[index]
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 1. A Checkbox para marcar como comprado
-                        Checkbox(
-                            checked = item.isBought,
-                            onCheckedChange = { isChecked ->
-                                scope.launch {
-                                    try {
-                                        // Cria uma cópia do item com o novo estado
-                                        val updatedItem = item.copy(isBought = isChecked)
-                                        // Envia para o servidor
-                                        client.updateItem(updatedItem)
-                                    } catch (e: Exception) {
-                                        println("Erro ao atualizar: ${e.message}")
-                                    }
-                                }
-                            }
-                        )
+            items(items, key = { it.id }) { item -> // Importante: usar o ID como chave para evitar bugs visuais
 
-                        // 2. Os Textos (Nome e Quantidade)
-                        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                            Text(
-                                text = item.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                // Adiciona o risco por cima do texto se estiver comprado
-                                textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                // Fica um pouco mais transparente se estiver comprado
-                                color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
-                            )
-                            if (item.quantity > 1) {
-                                Text(
-                                    text = "Qtd: ${item.quantity}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        // 3. O Botão de Apagar
-                        IconButton(onClick = {
+                // 1. Estado do Swipe
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { dismissValue ->
+                        if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
                             scope.launch {
+                                // Evita o bug de clicar 2 vezes rápido
+                                var jaDesfez = false
+
                                 try {
+                                    // Limpa qualquer Snackbar que já estivesse no ecrã para não criar "fila"
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+
+                                    // A. Apaga imediatamente no servidor
                                     client.deleteItem(item.id)
+
+                                    // B. Mostra a Snackbar e espera pela resposta
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = "${item.name} apagado",
+                                        actionLabel = "Desfazer",
+                                        duration = SnackbarDuration.Short
+                                    )
+
+                                    // C. Se o utilizador clicou no botão e ainda não tinha desfeito
+                                    if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
+                                        jaDesfez = true // Bloqueia cliques duplos
+
+                                        // Força o pop-up a desaparecer instantaneamente
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+
+                                        // Voltamos a adicionar o mesmo item à base de dados
+                                        client.addItem(item.copy(id = ""))
+                                    }
                                 } catch (e: Exception) {
                                     println("Erro ao apagar: ${e.message}")
                                 }
                             }
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Apagar", tint = MaterialTheme.colorScheme.error)
+                            true // Confirma que o swipe aconteceu
+                        } else {
+                            false // Ignora outros movimentos
                         }
                     }
-                }
+                )
+
+                // 2. O Componente de Deslizar
+                SwipeToDismissBox(
+                    state = dismissState,
+                    backgroundContent = {
+                        // O que aparece por trás quando deslizar (Fundo Vermelho com Lixo)
+                        val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
+                            MaterialTheme.colorScheme.errorContainer
+                        else
+                            MaterialTheme.colorScheme.background
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 4.dp) // Igual ao padding do Card
+                                .background(color),
+                            contentAlignment = Alignment.CenterEnd // Ícone alinhado à direita
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Apagar",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(end = 24.dp)
+                            )
+                        }
+                    },
+                    content = {
+                        // 3. O Cartão Original (agora sem o botão de lixo)
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = item.isBought,
+                                    onCheckedChange = { isChecked ->
+                                        scope.launch {
+                                            client.updateItem(item.copy(isBought = isChecked))
+                                        }
+                                    }
+                                )
+
+                                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                                    Text(
+                                        text = item.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                        color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (item.quantity > 1) {
+                                        Text(
+                                            text = "Qtd: ${item.quantity}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (item.isBought) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                )
             }
         }
     }
