@@ -179,6 +179,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // Guarda o item que estamos a editar no momento. Se for null, não estamos a editar nada.
     var itemToEdit by remember { mutableStateOf<ShoppingItem?>(null) }
 
+    // Começa como 'true' porque a primeira coisa que a app faz é carregar dados
+    var isLoading by remember { mutableStateOf(true) }
+
     // O 'scope' serve para podermos lançar rotinas assíncronas (como ir à internet) sem bloquear a interface da app.
     val scope = rememberCoroutineScope()
 
@@ -190,12 +193,15 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // ------------------------------------------------------------------------
     // O LaunchedEffect(Unit) é o código que corre UMA ÚNICA VEZ quando a App abre.
     LaunchedEffect(Unit) {
-        // 1. Primeiro, tenta ir buscar a lista atualizada à base de dados (Requisição GET)
+        // 1. Tenta carregar a lista inicial
         try {
+            isLoading = true // Liga a rodinha
             items.clear()
             items.addAll(client.getItems())
         } catch (e: Exception) {
             println("Erro inicial: ${e.message}")
+        } finally {
+            isLoading = false // Desliga a rodinha (quer corra bem ou mal)
         }
 
         // 2. Depois, liga o "Túnel" (WebSocket) e fica à escuta para sempre.
@@ -241,13 +247,29 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
             } },
         containerColor = BackgroundNavy // Garante que a zona central atrás da lista é escura
     ) { innerPadding ->
-        // LazyColumn é a Lista Otimizada. Ao contrário de uma "Column" normal, ela só desenha os itens
-        // que cabem no ecrã. Quando fazes scroll, ela recicla a memória. Essencial para listas grandes!
-        LazyColumn(
-            modifier = Modifier.padding(innerPadding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp) // Cria o espaço entre os cartões
-        ) {
+
+        // SE ESTIVER A CARREGAR: Mostra a rodinha no centro do ecrã
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = PrimaryAccent,
+                    strokeWidth = 4.dp,
+                    modifier = Modifier.size(48.dp) // Fica com um tamanho simpático
+                )
+            }
+        }
+        // SE JÁ NÃO ESTIVER A CARREGAR: Mostra a tua lista
+        else {
+            LazyColumn(
+                modifier = Modifier.padding(innerPadding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // key = { it.id }: ISTO É MUITO IMPORTANTE!
             // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
             // remover, evitando bugs em que apaga o item errado visualmente.
@@ -361,12 +383,34 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
-                                        .clip(CircleShape) // Garante que a área de clique é um círculo
+                                        .clip(CircleShape)
                                         .clickable {
-                                            // Ao clicar, envia para o servidor a ordem para inverter o estado (!item.isBought)
+                                            // 1. Criamos a versão atualizada do item com o visto trocado
+                                            val newState = !item.isBought
+                                            val updatedItem = item.copy(isBought = newState)
+
+                                            // 2. MAGIA OTIMISTA: Atualizamos a lista local IMEDIATAMENTE!
+                                            // (A animação vai disparar logo no ecrã, sem atrasos)
+                                            val index = items.indexOfFirst { it.id == item.id }
+                                            if (index != -1) {
+                                                items[index] = updatedItem
+                                            }
+
+                                            // 3. Enviamos para o servidor em background
                                             scope.launch {
-                                                client.updateItem(item.copy(isBought = !item.isBought))
-                                            } },
+                                                try {
+                                                    client.updateItem(updatedItem)
+                                                    // Quando o servidor responder com REFRESH, a lista vai
+                                                    // recarregar, mas o utilizador nem nota porque já está igual!
+                                                } catch (e: Exception) {
+                                                    println("Erro de rede: ${e.message}")
+                                                    // 4. Se falhar (sem rede), revertemos a animação
+                                                    if (index != -1) {
+                                                        items[index] = item // volta a colocar o antigo
+                                                    }
+                                                }
+                                            }
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -410,6 +454,7 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
             }
         }
     }
+    }
 
     // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
     if (showDialog) {
@@ -430,23 +475,34 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
         )
     }
 
-    // Se houver um item selecionado para editar, mostra o pop-up de edição
+    /// Se houver um item selecionado para editar, mostra o pop-up
     itemToEdit?.let { item ->
         EditItemDialog(
             item = item,
-            onDismiss = { itemToEdit = null }, // Fecha o pop-up
+            onDismiss = { itemToEdit = null },
             onConfirm = { novoNome, novaQuantidade ->
+
+                // 1. Cria a nova versão do item
+                val updatedItem = item.copy(
+                    name = novoNome,
+                    quantity = novaQuantidade.toIntOrNull() ?: 1
+                )
+
+                // 2. MAGIA OTIMISTA: Atualiza a lista e fecha o pop-up instantaneamente!
+                val index = items.indexOfFirst { it.id == item.id }
+                if (index != -1) {
+                    items[index] = updatedItem
+                }
+                itemToEdit = null // Fecha o pop-up sem esperar pelo servidor
+
+                // 3. Envia para o servidor em background
                 scope.launch {
                     try {
-                        // Cria uma cópia do item com o nome e quantidade novos
-                        val updatedItem = item.copy(
-                            name = novoNome,
-                            quantity = novaQuantidade.toIntOrNull() ?: 1
-                        )
-                        client.updateItem(updatedItem) // Envia para o servidor
-                        itemToEdit = null              // Fecha o pop-up
+                        client.updateItem(updatedItem)
                     } catch (e: Exception) {
                         println("Erro ao editar: ${e.message}")
+                        // Se falhar, reverte para o valor antigo
+                        if (index != -1) items[index] = item
                     }
                 }
             }
