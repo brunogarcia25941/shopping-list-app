@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
+import androidx.compose.material.icons.rounded.ShoppingCart
 
 
 // ============================================================================
@@ -263,6 +264,44 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                 )
             }
         }
+        // "Empty State"
+        else if (items.isEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Ícone gigante do carrinho
+                        Icon(
+                            imageVector = Icons.Rounded.ShoppingCart,
+                            contentDescription = "Carrinho Vazio",
+                            modifier = Modifier.size(100.dp),
+                            tint = TextGray.copy(alpha = 0.5f) // Fica com um tom cinza meio transparente
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "A lista de compras está vazia",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextGray
+                        )
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Botão que faz a mesma coisa que o '+' flutuante
+                        Button(
+                            onClick = { showDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
+                            shape = RoundedCornerShape(50),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Adicionar o primeiro item", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
         // SE JÁ NÃO ESTIVER A CARREGAR: Mostra a tua lista
         else {
             LazyColumn(
