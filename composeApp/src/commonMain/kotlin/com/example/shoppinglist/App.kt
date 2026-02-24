@@ -20,6 +20,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ExitToApp
@@ -30,6 +31,9 @@ import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.ui.text.style.TextAlign
 
 
 // ============================================================================
@@ -46,17 +50,23 @@ val ErrorRed = Color(0xFF8B0000)          // Vermelho escuro para o fundo do Swi
 
 @Composable
 fun App() {
-    // 1. Inicializa a "memória do telemóvel"
     val settings = remember { Settings() }
 
-    // 2. Em vez de começar vazio, vai procurar à memória se já existe o "FAMILY_CODE".
-    // Se não existir, devolve "" (vazio).
+    // 1. Ler Código da Casa
     var loggedFamilyCode by remember {
         mutableStateOf(settings.getString("FAMILY_CODE", ""))
     }
 
+    // 2. Ler Preferência de Tema (Por defeito é TRUE/Escuro)
+    var isDarkTheme by remember {
+        mutableStateOf(settings.getBoolean("IS_DARK_MODE", true))
+    }
+
+    // 3. Escolhe o esquema de cores com base na variável
+    val currentScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
+
     MaterialTheme(
-        colorScheme = ModernDarkBlueScheme,
+        colorScheme = currentScheme,
         shapes = Shapes(
             small = RoundedCornerShape(12.dp),
             medium = RoundedCornerShape(20.dp),
@@ -66,19 +76,22 @@ fun App() {
         if (loggedFamilyCode.isEmpty()) {
             LoginScreen(
                 onEnter = { code ->
-                    // 3. Atualiza o ecrã
                     loggedFamilyCode = code
-                    // 4. GUARDA NA MEMÓRIA para a próxima vez que a app abrir!
                     settings.putString("FAMILY_CODE", code)
                 }
             )
         } else {
+            // Passamos o tema e a função de mudar o tema para o ecrã da lista
             ShoppingListScreen(
                 familyCode = loggedFamilyCode,
+                isDarkTheme = isDarkTheme,
+                onToggleTheme = {
+                    val newState = !isDarkTheme
+                    isDarkTheme = newState
+                    settings.putBoolean("IS_DARK_MODE", newState) // Guarda na memória
+                },
                 onLogout = {
-                    // 5. APAGA DA MEMÓRIA para poder trocar de família
                     settings.remove("FAMILY_CODE")
-                    // 6. Atualiza o ecrã (volta ao Login)
                     loggedFamilyCode = ""
                 }
             )
@@ -92,13 +105,13 @@ fun LoginScreen(onEnter: (String) -> Unit) {
 
     // Ecrã centrado
     Box(
-        modifier = Modifier.fillMaxSize().background(BackgroundNavy),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Card(
             modifier = Modifier.padding(24.dp).fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = CardSurfaceBlue)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -124,8 +137,8 @@ fun LoginScreen(onEnter: (String) -> Unit) {
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
-                        unfocusedTextColor = TextWhite,
-                        focusedTextColor = TextWhite
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     singleLine = true
                 )
@@ -135,7 +148,7 @@ fun LoginScreen(onEnter: (String) -> Unit) {
                         if (codeInput.isNotBlank()) onEnter(codeInput)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Text("Entrar", fontWeight = FontWeight.Bold)
                 }
@@ -162,10 +175,29 @@ private val ModernDarkBlueScheme = darkColorScheme(
     onErrorContainer = Color.White
 )
 
+// paleta clara
+val LightBackground = Color(0xFFF4F7F6)   // Um cinza muito clarinho (quase branco)
+val LightSurface = Color(0xFFFFFFFF)      // Branco puro para os cartões
+val LightTextPrimary = Color(0xFF0B132B)  // Azul escuro (o fundo do dark mode) para o texto
+val LightTextSecondary = Color(0xFF64748B)// Cinzento para quantidades
+
+private val ModernLightScheme = lightColorScheme(
+    primary = PrimaryAccent,
+    background = LightBackground,
+    surface = LightBackground,
+    surfaceVariant = LightSurface,
+    onPrimary = Color.White,
+    onBackground = LightTextPrimary,
+    onSurface = LightTextPrimary,
+    onSurfaceVariant = LightTextPrimary,
+    errorContainer = ErrorRed,
+    onErrorContainer = Color.White
+)
+
 // O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
+fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: () -> Unit, onLogout: () -> Unit) {
     // ------------------------------------------------------------------------
     // GESTÃO DE ESTADO (State Management)
     // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
@@ -183,6 +215,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
 
     // Começa como 'true' porque a primeira coisa que a app faz é carregar dados
     var isLoading by remember { mutableStateOf(true) }
+
+    // Guarda as sugestoes da casa
+    val suggestions = remember { mutableStateListOf<QuickSuggestion>() }
 
     // Controla o pop-up de limpar tudo
     var showClearConfirmDialog by remember { mutableStateOf(false) }
@@ -202,7 +237,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
         try {
             isLoading = true // Liga a rodinha
             items.clear()
+            suggestions.clear()
             items.addAll(client.getItems())
+            suggestions.addAll(client.getSuggestions())
         } catch (e: Exception) {
             println("Erro inicial: ${e.message}")
         } finally {
@@ -231,33 +268,111 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // O Scaffold é o "esqueleto" de uma app clássica. Tem espaços (slots) pré-definidos para o topo, fundo, botões flutuantes, etc.
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Casa: $familyCode", fontWeight = FontWeight.Bold, color = PrimaryAccent) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundNavy),
-                actions = {
-                    // Só mostra o botão de limpar se existir pelo menos 1 item comprado
-                    if (items.any { it.isBought }) {
-                        IconButton(onClick = { showClearConfirmDialog = true }) {
-                            Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = PrimaryAccent)
+            Column(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text("Casa: $familyCode", fontWeight = FontWeight.Bold, color = PrimaryAccent)
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    actions = {
+                        //Botão de Mudar Tema (Sol / Lua)
+                        IconButton(onClick = onToggleTheme) {
+                            Icon(
+                                imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                                contentDescription = "Mudar Tema",
+                                tint = PrimaryAccent
+                            )
+                        }
+                        // Botão de Limpar
+                        if (items.any { it.isBought }) {
+                            IconButton(onClick = { showClearConfirmDialog = true }) {
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = PrimaryAccent)
+                            }
+                        }
+                        // Botão de Sair
+                        IconButton(onClick = onLogout) {
+                            Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = PrimaryAccent)
                         }
                     }
-                    // botao de sair
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = PrimaryAccent)
+                )
+
+                // BARRA DE PROGRESSO
+                // Só mostramos a barra se a lista não estiver vazia
+                if (items.isNotEmpty()) {
+                    val totalItems = items.size
+                    val boughtItems = items.count { it.isBought }
+                    val progress = boughtItems.toFloat() / totalItems.toFloat()
+
+                    // Animação suave para a barra encher
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = progress,
+                        animationSpec = tween(durationMillis = 500)
+                    )
+
+                    // Quando chega aos 100%, a barra muda de Azul Ciano para Verde!
+                    val progressColor by animateColorAsState(
+                        targetValue = if (boughtItems == totalItems) Color(0xFF4CAF50) else PrimaryAccent,
+                        animationSpec = tween(durationMillis = 500)
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        // Os Textos por cima da barra
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Progresso",
+                                color = TextGray,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "$boughtItems/$totalItems (${(progress * 100).toInt()}%)",
+                                color = if (boughtItems == totalItems) progressColor else TextGray,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // A barra visual
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(50)) // Arredonda o contentor todo (fundo e frente)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)   // A cor do fundo da barra (o trilho)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(animatedProgress) // A largura deste Box é a % do progresso!
+                                    .fillMaxHeight()
+                                    .background(progressColor)      // A cor do enchimento (Ciano ou Verde)
+                            )
+                        }
                     }
                 }
-            ) },
+            }
+                 },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }, // Diz ao Scaffold onde deve desenhar os pop-ups de "Desfazer"
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true }, // Ao clicar, muda a variável para abrir o pop-up
                 containerColor = PrimaryAccent,
-                contentColor = BackgroundNavy,
+                contentColor = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(50) // Faz com que o botão seja uma bola perfeita
             ) {
                 Icon(Icons.Rounded.Add, contentDescription = "Adicionar", modifier = Modifier.size(28.dp))
             } },
-        containerColor = BackgroundNavy // Garante que a zona central atrás da lista é escura
+        containerColor = MaterialTheme.colorScheme.surfaceVariant // Garante que a zona central atrás da lista é escura
     ) { innerPadding ->
 
         // SE ESTIVER A CARREGAR: Mostra a rodinha no centro do ecrã
@@ -303,7 +418,7 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                         // Botão que faz a mesma coisa que o '+' flutuante
                         Button(
                             onClick = { showDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.background),
                             shape = RoundedCornerShape(50),
                             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                         ) {
@@ -320,10 +435,24 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+
+                // A dica visual no topo da lista
+                item {
+                    Text(
+                        text = "Desliza para a esquerda para apagar",
+                        color = TextGray,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+
             // key = { it.id }: ISTO É MUITO IMPORTANTE!
             // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
             // remover, evitando bugs em que apaga o item errado visualmente.
-            items(items, key = { it.id }) { item ->
+                // Os itens com isBought = false ficam em cima, isBought = true vão para baixo.
+            items(items.sortedBy { it.isBought }, key = { it.id }) { item ->
                 // ----------------------------------------------------------------
                 // LÓGICA DO SWIPE (Deslizar para apagar)
                 // ----------------------------------------------------------------
@@ -366,7 +495,7 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                 // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
                 // ----------------------------------------------------------------
                 val animatedCardColor by animateColorAsState(
-                    targetValue = if (item.isBought) BackgroundNavy else CardSurfaceBlue,
+                    targetValue = if (item.isBought) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceVariant,
                     animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
                 )
                 val animatedAlpha by animateFloatAsState(
@@ -410,7 +539,7 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
                             // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
-                            elevation = CardDefaults.cardElevation(defaultElevation = if (item.isBought) 0.dp else 8.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
@@ -487,13 +616,13 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                                         text = item.name,
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                         textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                        color = TextWhite.copy(alpha = animatedAlpha)
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = animatedAlpha)
                                     )
                                     if (item.quantity > 1) {
                                         Text(
                                             text = "Qtd: ${item.quantity}",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = TextWhite.copy(alpha = animatedAlpha)
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = animatedAlpha)
                                         )
                                     }
                                 }
@@ -509,17 +638,31 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
     if (showDialog) {
         AddItemDialog(
-            onDismiss = { showDialog = false }, // Fecha se o utilizador clicar fora ou no cancelar
+            suggestions = suggestions,
+            onAddSuggestion = { nomeSugestao ->
+                scope.launch {
+                    try {
+                        val nova = client.addSuggestion(nomeSugestao)
+                        suggestions.add(nova) // Adiciona à lista local imediatamente
+                    } catch (e: Exception) { println("Erro ao guardar sugestão") }
+                }
+            },
+            onDeleteSuggestion = { idSugestao ->
+                scope.launch {
+                    try {
+                        client.deleteSuggestion(idSugestao)
+                        suggestions.removeAll { it.id == idSugestao } // Remove visualmente
+                    } catch (e: Exception) { println("Erro ao apagar sugestão") }
+                }
+            },
+            onDismiss = { showDialog = false },
             onConfirm = { name, quantity ->
                 scope.launch {
-                    // Converte o texto da quantidade para número (se falhar ou estiver vazio, assume 1)
                     val newItem = ShoppingItem(name = name, quantity = quantity.toIntOrNull() ?: 1)
                     try {
-                        client.addItem(newItem) // Envia para o servidor
-                        showDialog = false      // Fecha o pop-up logo a seguir
-                    } catch (e: Exception) {
-                        println("Erro: ${e.message}")
-                    }
+                        client.addItem(newItem)
+                        showDialog = false
+                    } catch (e: Exception) { println("Erro: ${e.message}") }
                 }
             }
         )
@@ -563,9 +706,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     if (showClearConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showClearConfirmDialog = false },
-            containerColor = CardSurfaceBlue,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             titleContentColor = PrimaryAccent,
-            textContentColor = TextWhite,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Limpar Comprados", fontWeight = FontWeight.Bold) },
             text = { Text("Tens a certeza que queres apagar todos os itens que já foram comprados? Esta ação não pode ser desfeita.") },
             confirmButton = {
@@ -604,62 +747,120 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
 // ============================================================================
 // COMPONENTE EXTRA: O Pop-up (Dialog) de Adicionar Item
 // ============================================================================
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
-    // Estas variáveis guardam o que o utilizador está a escrever nos campos de texto em tempo real
+fun AddItemDialog(
+    suggestions: List<QuickSuggestion>,
+    onAddSuggestion: (String) -> Unit,
+    onDeleteSuggestion: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
     var name by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
+    var saveAsSuggestion by remember { mutableStateOf(false) } // A caixinha de verificação
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = CardSurfaceBlue,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         titleContentColor = PrimaryAccent,
-        textContentColor = TextWhite,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text("Novo Item", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Campo de Texto para o Nome
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+
+                // --- ÁREA DAS SUGESTÕES RÁPIDAS ---
+                if (suggestions.isNotEmpty()) {
+                    Text("Sugestões Rápidas (Pressiona para apagar):", style = MaterialTheme.typography.labelMedium, color = TextGray)
+
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(suggestions, key = { it.id }) { sug ->
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.background,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {
+                                        // Clique Rápido: Adiciona logo o item com quantidade 1 e fecha!
+                                        onConfirm(sug.name, "1")
+                                    },
+                                    onLongClick = {
+                                        // Clique Longo: Apaga a sugestão
+                                        onDeleteSuggestion(sug.id)
+                                    }
+                                )
+                            ) {
+                                Text(
+                                    text = sug.name,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = PrimaryAccent,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    Divider(color = TextGray.copy(alpha = 0.2f)) // Linha separadora
+                }
+
+                // --- ÁREA NORMAL DE TEXTO ---
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it }, // Atualiza a variável 'name' sempre que escreves uma letra
+                    onValueChange = { name = it },
                     label = { Text("Nome (ex: Arroz)") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
-                        unfocusedTextColor = TextWhite,
-                        focusedTextColor = TextWhite
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 )
-                // Campo de Texto para a Quantidade
+
                 OutlinedTextField(
                     value = quantity,
-                    onValueChange = { quantity = it }, // Atualiza a variável 'quantity'
+                    onValueChange = { quantity = it },
                     label = { Text("Quantidade") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
-                        unfocusedTextColor = TextWhite,
-                        focusedTextColor = TextWhite
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
                 )
+
+                // Checkbox para guardar nos favoritos
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { saveAsSuggestion = !saveAsSuggestion }) {
+                    Checkbox(
+                        checked = saveAsSuggestion,
+                        onCheckedChange = { saveAsSuggestion = it },
+                        colors = CheckboxDefaults.colors(checkedColor = PrimaryAccent)
+                    )
+                    Text("Guardar como sugestão rápida", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name, quantity) }, // Dispara o evento de confirmação passando os textos
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
+                onClick = {
+                    if (saveAsSuggestion && name.isNotBlank()) {
+                        onAddSuggestion(name) // Guarda a sugestão na BD
+                    }
+                    onConfirm(name, quantity)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text("Adicionar", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss, // Dispara o evento para fechar
-                colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
-            ) {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = TextGray)) {
                 Text("Cancelar")
             }
         }
@@ -678,9 +879,9 @@ fun EditItemDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = CardSurfaceBlue,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         titleContentColor = PrimaryAccent,
-        textContentColor = TextWhite,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text("Editar Item", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -691,8 +892,8 @@ fun EditItemDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
-                        unfocusedTextColor = TextWhite,
-                        focusedTextColor = TextWhite
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -703,8 +904,8 @@ fun EditItemDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
-                        unfocusedTextColor = TextWhite,
-                        focusedTextColor = TextWhite
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -713,7 +914,7 @@ fun EditItemDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(name, quantity) },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = BackgroundNavy),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text("Guardar", fontWeight = FontWeight.Bold)

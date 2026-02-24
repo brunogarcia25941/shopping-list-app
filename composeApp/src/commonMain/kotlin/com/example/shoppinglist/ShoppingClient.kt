@@ -25,6 +25,8 @@ data class ShoppingItem(
     val familyCode: String = ""
 )
 
+
+
 class ShoppingClient(private val familyCode: String) {
 
     // 1. COLOCA AQUI O TEU LINK DO NGROK (Sem a barra / no fim)
@@ -82,4 +84,24 @@ class ShoppingClient(private val familyCode: String) {
             println("Erro no WebSocket: ${e.message}")
         }
     }
+
+
+    suspend fun getSuggestions(): List<QuickSuggestion> {
+        return client.get("$baseUrl/shopping-list/$familyCode/suggestions").body()
+    }
+
+    suspend fun addSuggestion(name: String): QuickSuggestion {
+        return client.post("$baseUrl/shopping-list/$familyCode/suggestions") {
+            contentType(ContentType.Application.Json)
+            setBody(QuickSuggestion(name = name))
+        }.body()
+    }
+
+    suspend fun deleteSuggestion(id: String) {
+        client.delete("$baseUrl/shopping-list/$familyCode/suggestions/$id")
+    }
 }
+
+// O Modelo da Sugestão no Android
+@kotlinx.serialization.Serializable
+data class QuickSuggestion(val id: String = "", val familyCode: String = "", val name: String)
