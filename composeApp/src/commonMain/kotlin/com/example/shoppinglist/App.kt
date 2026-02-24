@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.scale
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.DeleteSweep
 
 
 // ============================================================================
@@ -183,6 +184,9 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
     // Começa como 'true' porque a primeira coisa que a app faz é carregar dados
     var isLoading by remember { mutableStateOf(true) }
 
+    // Controla o pop-up de limpar tudo
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
+
     // O 'scope' serve para podermos lançar rotinas assíncronas (como ir à internet) sem bloquear a interface da app.
     val scope = rememberCoroutineScope()
 
@@ -231,6 +235,13 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                 title = { Text("Casa: $familyCode", fontWeight = FontWeight.Bold, color = PrimaryAccent) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundNavy),
                 actions = {
+                    // Só mostra o botão de limpar se existir pelo menos 1 item comprado
+                    if (items.any { it.isBought }) {
+                        IconButton(onClick = { showClearConfirmDialog = true }) {
+                            Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = PrimaryAccent)
+                        }
+                    }
+                    // botao de sair
                     IconButton(onClick = onLogout) {
                         Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = PrimaryAccent)
                     }
@@ -543,6 +554,45 @@ fun ShoppingListScreen(familyCode: String, onLogout: () -> Unit) {
                         // Se falhar, reverte para o valor antigo
                         if (index != -1) items[index] = item
                     }
+                }
+            }
+        )
+    }
+
+    // Pop-up de Confirmação para limpar tudo
+    if (showClearConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmDialog = false },
+            containerColor = CardSurfaceBlue,
+            titleContentColor = PrimaryAccent,
+            textContentColor = TextWhite,
+            title = { Text("Limpar Comprados", fontWeight = FontWeight.Bold) },
+            text = { Text("Tens a certeza que queres apagar todos os itens que já foram comprados? Esta ação não pode ser desfeita.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // MAGIA OTIMISTA: Apagamos do ecrã instantaneamente
+                        items.removeAll { it.isBought }
+                        showClearConfirmDialog = false // Fecha o pop-up
+
+                        // Manda o comando para o servidor em background
+                        scope.launch {
+                            try {
+                                client.clearBoughtItems()
+                            } catch (e: Exception) {
+                                println("Erro ao limpar: ${e.message}")
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text("Apagar Tudo", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmDialog = false }) {
+                    Text("Cancelar", color = TextGray)
                 }
             }
         )

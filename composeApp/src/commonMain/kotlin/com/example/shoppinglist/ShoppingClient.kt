@@ -63,6 +63,10 @@ class ShoppingClient(private val familyCode: String) {
         client.delete("$baseUrl/shopping-list/$familyCode/$id")
     }
 
+    suspend fun clearBoughtItems() {
+        client.delete("$baseUrl/shopping-list/$familyCode/bought")
+    }
+
     // A chamada do WebSocket fica muito mais simples de escrever assim:
     fun listenForUpdates(): Flow<String> = flow {
         try {
