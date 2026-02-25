@@ -22,18 +22,18 @@ data class ShoppingItem(
     val quantity: Int,
     val isBought: Boolean = false,
     val category: String = "Geral",
-    val familyCode: String = ""
+    val familyCode: String = "",
+    val notes: String? = null,       // texto dos detalhes (ex: "Mimosa Magro")
+    val photoBase64: String? = null  // imagem comprimida em texto
 )
 
 
 
 class ShoppingClient(private val familyCode: String) {
 
-    // 1. COLOCA AQUI O TEU LINK DO NGROK (Sem a barra / no fim)
-    // Exemplo: "https://1234-abcd-5678.ngrok-free.app"
-    private val baseUrl = "https://unpalatal-apocrine-shira.ngrok-free.dev"
+    private val baseUrl = "https://shopping-backend-familia.onrender.com"
 
-    // 2. Prepara o link do WebSocket (Troca 'https' por 'wss')
+    // Preparar o link do WebSocket (Troca 'https' por 'wss')
     private val wsUrl = baseUrl.replace("https://", "wss://")
 
     private val client = HttpClient {

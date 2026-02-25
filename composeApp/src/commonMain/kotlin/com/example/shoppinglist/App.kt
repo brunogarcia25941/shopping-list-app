@@ -34,6 +34,16 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.CameraAlt
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
+import com.preat.peekaboo.image.picker.SelectionMode
+import com.preat.peekaboo.image.picker.toImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
+
 
 
 // ============================================================================
@@ -212,6 +222,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
 
     // Guarda o item que estamos a editar no momento. Se for null, não estamos a editar nada.
     var itemToEdit by remember { mutableStateOf<ShoppingItem?>(null) }
+
+    var itemToShowDetails by remember { mutableStateOf<ShoppingItem?>(null) }
 
     // Começa como 'true' porque a primeira coisa que a app faz é carregar dados
     var isLoading by remember { mutableStateOf(true) }
@@ -626,6 +638,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                                         )
                                     }
                                 }
+                                // Botão de Informação à direita
+                                IconButton(onClick = { itemToShowDetails = item }) {
+                                    Icon(Icons.Rounded.Info, contentDescription = "Detalhes", tint = PrimaryAccent)
+                                }
                             }
                         }
                     }
@@ -695,6 +711,33 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                     } catch (e: Exception) {
                         println("Erro ao editar: ${e.message}")
                         // Se falhar, reverte para o valor antigo
+                        if (index != -1) items[index] = item
+                    }
+                }
+            }
+        )
+    }
+    // Pop-up dos Detalhes do Item
+    itemToShowDetails?.let { item ->
+        ItemDetailsDialog(
+            item = item,
+            onDismiss = { itemToShowDetails = null },
+            onConfirm = { updatedItem ->
+
+                // 1. Magia Otimista: Atualizamos no ecrã logo!
+                val index = items.indexOfFirst { it.id == item.id }
+                if (index != -1) {
+                    items[index] = updatedItem
+                }
+                itemToShowDetails = null
+
+                // 2. Manda para a nossa Base de Dados no Render
+                scope.launch {
+                    try {
+                        client.updateItem(updatedItem)
+                    } catch (e: Exception) {
+                        println("Erro ao atualizar detalhes: ${e.message}")
+                        // Se falhar a net, desfaz a alteração local
                         if (index != -1) items[index] = item
                     }
                 }
@@ -925,6 +968,120 @@ fun EditItemDialog(
                 onClick = onDismiss,
                 colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
             ) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalEncodingApi::class) // Dizemos ao Kotlin que queremos usar o Base64 novo
+@Composable
+fun ItemDetailsDialog(
+    item: ShoppingItem,
+    onDismiss: () -> Unit,
+    onConfirm: (ShoppingItem) -> Unit
+) {
+    var notes by remember { mutableStateOf(item.notes ?: "") }
+    var photoBase64 by remember { mutableStateOf(item.photoBase64) }
+
+    val scope = rememberCoroutineScope()
+
+    val singleImagePicker = rememberImagePickerLauncher(
+        selectionMode = SelectionMode.Single,
+        scope = scope,
+        onResult = { byteArrays ->
+            byteArrays.firstOrNull()?.let { byteArray ->
+                // Usamos o Base64 nativo do Kotlin para codificar
+                photoBase64 = Base64.Default.encode(byteArray)
+            }
+        }
+    )
+
+    // MAGIA: Lemos os bytes fora da interface para evitar o erro do "Try-Catch" no Compose
+    val imageBitmap = remember(photoBase64) {
+        if (photoBase64 != null) {
+            try {
+                // Descodificamos o Base64 e transformamos em Imagem com segurança
+                val bytes = Base64.Default.decode(photoBase64!!)
+                bytes.toImageBitmap()
+            } catch (e: Exception) {
+                null // Se falhar, fica nulo (ex: imagem corrompida)
+            }
+        } else null
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = PrimaryAccent,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = { Text("Detalhes: ${item.name}", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // 1. Campo para as Notas Específicas
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notas (ex: Marca Mimosa)") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                // 2. Área da Imagem (Galeria/Câmara)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.background)
+                        .clickable { singleImagePicker.launch() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (photoBase64 != null) {
+
+                        if (imageBitmap != null) {
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = "Foto do Produto",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text("Erro ao carregar imagem", color = ErrorRed)
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = TextGray, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tocar para adicionar foto", color = TextGray, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val updatedItem = item.copy(
+                        notes = notes.takeIf { it.isNotBlank() },
+                        photoBase64 = photoBase64
+                    )
+                    onConfirm(updatedItem)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text("Guardar", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = TextGray)) {
                 Text("Cancelar")
             }
         }

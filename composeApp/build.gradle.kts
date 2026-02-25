@@ -53,6 +53,9 @@ kotlin {
             implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
 
             implementation("com.russhwolf:multiplatform-settings-no-arg:1.1.1")
+
+            // Biblioteca para a Galeria/Câmara com compressão automática
+            implementation("io.github.onseok:peekaboo-image-picker:0.5.2")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
