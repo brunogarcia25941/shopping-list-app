@@ -43,7 +43,8 @@ import com.preat.peekaboo.image.picker.SelectionMode
 import com.preat.peekaboo.image.picker.toImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
-
+import com.preat.peekaboo.image.picker.ResizeOptions
+import kotlinx.serialization.json.Json
 
 
 // ============================================================================
@@ -258,22 +259,49 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
             isLoading = false // Desliga a rodinha (quer corra bem ou mal)
         }
 
-        // 2. Depois, liga o "Túnel" (WebSocket) e fica à escuta para sempre.
-        // O .collect() fica num loop à espera que o servidor mande mensagens.
-        client.listenForUpdates().collect { command ->
-            // Se alguém noutro telemóvel adicionar um item, o servidor grita "REFRESH".
-            if (command == "REFRESH") {
-                try {
-                    val freshItems = client.getItems() // Vamos buscar a lista nova
-                    items.clear()
-                    items.addAll(freshItems)           // Atualizamos a lista no ecrã
-                } catch (e: Exception) {
-                    println("Erro ao recarregar: ${e.message}")
+        // Logica inteligente do websocket
+        // O .collect() fica à escuta dos novos eventos em JSON
+        client.listenForUpdates().collect { jsonText ->
+            try {
+                // Descodifica o texto que o servidor enviou para o objeto WsMessage
+                val message = Json.decodeFromString<WsMessage>(jsonText)
+
+                // Mexe APENAS na lista local (`items`), sem gastar internet extra
+                when (message.action) {
+                    "ADD" -> {
+                        message.item?.let { newItem ->
+                            // Só adiciona se o item não existir já na nossa lista
+                            if (items.none { it.id == newItem.id }) {
+                                items.add(newItem)
+                            }
+                        }
+                    }
+                    "UPDATE" -> {
+                        message.item?.let { updatedItem ->
+                            // Procura a gaveta exata deste item e substitui-o
+                            val index = items.indexOfFirst { it.id == updatedItem.id }
+                            if (index != -1) {
+                                items[index] = updatedItem
+                            }
+                        }
+                    }
+                    "DELETE" -> {
+                        message.itemId?.let { idToApagar ->
+                            // Remove o cartão que tem este ID
+                            items.removeAll { it.id == idToApagar }
+                        }
+                    }
+                    "DELETE_BOUGHT" -> {
+                        // Remove da lista todos os que têm o visto
+                        items.removeAll { it.isBought }
+                    }
                 }
+            } catch (e: Exception) {
+                // Se a mensagem vier corrompida ou ainda for o velho "REFRESH", apenas ignoramos
+                println("Erro ao decifrar evento do servidor: ${e.message}")
             }
         }
     }
-
     // ------------------------------------------------------------------------
     // CONSTRUÇÃO DA INTERFACE (UI)
     // ------------------------------------------------------------------------
@@ -986,18 +1014,27 @@ fun ItemDetailsDialog(
 
     val scope = rememberCoroutineScope()
 
+    val resizeOptions = ResizeOptions(
+        width = 800, // Máximo de 800 píxeis de largura
+        height = 800, // Máximo de 800 píxeis de altura
+        resizeThresholdBytes = 512 * 1024L, // Só comprime se a foto original tiver mais de 512 KB
+        compressionQuality = 0.5 // Perde um bocadinho de detalhe impercetível, mas poupa 50% do espaço
+    )
+
+    // "apanhador" de imagens
     val singleImagePicker = rememberImagePickerLauncher(
         selectionMode = SelectionMode.Single,
         scope = scope,
+        resizeOptions = resizeOptions,
         onResult = { byteArrays ->
             byteArrays.firstOrNull()?.let { byteArray ->
-                // Usamos o Base64 nativo do Kotlin para codificar
+                // O byteArray que chega aqui já vem leve e redimensionado
                 photoBase64 = Base64.Default.encode(byteArray)
             }
         }
     )
 
-    // MAGIA: Lemos os bytes fora da interface para evitar o erro do "Try-Catch" no Compose
+    // Lemos os bytes fora da interface para evitar o erro do "Try-Catch" no Compose
     val imageBitmap = remember(photoBase64) {
         if (photoBase64 != null) {
             try {

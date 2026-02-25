@@ -27,6 +27,13 @@ data class ShoppingItem(
     val photoBase64: String? = null  // imagem comprimida em texto
 )
 
+@Serializable
+data class WsMessage(
+    val action: String,
+    val item: ShoppingItem? = null,
+    val itemId: String? = null
+)
+
 
 
 class ShoppingClient(private val familyCode: String) {
