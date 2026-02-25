@@ -46,6 +46,9 @@ import androidx.compose.foundation.Image
 import com.preat.peekaboo.image.picker.ResizeOptions
 import kotlinx.serialization.json.Json
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Language
+import com.example.shoppinglist.t
 
 
 // ============================================================================
@@ -74,6 +77,11 @@ fun App() {
         mutableStateOf(settings.getBoolean("IS_DARK_MODE", true))
     }
 
+
+
+    // Variável do Idioma
+    var isPortuguese by remember { mutableStateOf(settings.getBoolean("IS_PT", true)) }
+
     // 3. Escolhe o esquema de cores com base na variável
     val currentScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
 
@@ -87,6 +95,7 @@ fun App() {
     ) {
         if (loggedFamilyCode.isEmpty()) {
             LoginScreen(
+                isPt = isPortuguese,
                 onEnter = { code ->
                     loggedFamilyCode = code
                     settings.putString("FAMILY_CODE", code)
@@ -97,10 +106,16 @@ fun App() {
             ShoppingListScreen(
                 familyCode = loggedFamilyCode,
                 isDarkTheme = isDarkTheme,
+
                 onToggleTheme = {
                     val newState = !isDarkTheme
                     isDarkTheme = newState
                     settings.putBoolean("IS_DARK_MODE", newState) // Guarda na memória
+                },
+                isPortuguese = isPortuguese,
+                onLanguageChange = { newState ->
+                    isPortuguese = newState // Muda a variável
+                    settings.putBoolean("IS_PT", newState) // Guarda na memória local!
                 },
                 onLogout = {
                     settings.remove("FAMILY_CODE")
@@ -112,7 +127,7 @@ fun App() {
 }
 
 @Composable
-fun LoginScreen(onEnter: (String) -> Unit) {
+fun LoginScreen(isPt: Boolean, onEnter: (String) -> Unit) {
     var codeInput by remember { mutableStateOf("") }
 
     // Ecrã centrado
@@ -131,13 +146,13 @@ fun LoginScreen(onEnter: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Bem-vindo",
+                    t("Bem-vindo", "Welcome", isPt),
                     style = MaterialTheme.typography.headlineMedium,
                     color = PrimaryAccent,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Insere o código da tua família para entrares na lista partilhada.",
+                    t("Insere o código da tua família para entrares na lista partilhada.", "Enter the code of your family to enter the shared list.", isPt),
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextGray
                 )
@@ -145,7 +160,7 @@ fun LoginScreen(onEnter: (String) -> Unit) {
                 OutlinedTextField(
                     value = codeInput,
                     onValueChange = { codeInput = it.uppercase() }, // Força a ficar tudo em maiúsculas
-                    label = { Text("Código da Casa") },
+                    label = { Text(t("Código da Casa", "Family Code", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -162,7 +177,7 @@ fun LoginScreen(onEnter: (String) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text("Entrar", fontWeight = FontWeight.Bold)
+                    Text(t("Entrar", "Login", isPt), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -209,7 +224,7 @@ private val ModernLightScheme = lightColorScheme(
 // O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: () -> Unit, onLogout: () -> Unit) {
+fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: Boolean, onLanguageChange: (Boolean) -> Unit, onToggleTheme: () -> Unit, onLogout: () -> Unit) {
     // ------------------------------------------------------------------------
     // GESTÃO DE ESTADO (State Management)
     // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
@@ -241,6 +256,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
 
     // Controlador daquela barra preta que aparece no fundo (Snackbar) com o botão "Desfazer"
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     // ------------------------------------------------------------------------
     // CICLO DE VIDA E WEBSOCKETS
@@ -312,17 +329,17 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text("Casa: $familyCode", fontWeight = FontWeight.Bold, color = PrimaryAccent)
+                        Text(t("Casa: $familyCode", "Home: $familyCode", isPortuguese), fontWeight = FontWeight.Bold, color = PrimaryAccent)
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
                     actions = {
-                        //Botão de Mudar Tema (Sol / Lua)
-                        IconButton(onClick = onToggleTheme) {
+                        //botao de definicoes
+                        IconButton(onClick = { showSettingsDialog = true }) {
                             Icon(
-                                imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
-                                contentDescription = "Mudar Tema",
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = t("Definições", "Settings", isPortuguese),
                                 tint = PrimaryAccent
                             )
                         }
@@ -369,7 +386,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Progresso",
+                                t("Progresso", "Progress", isPortuguese),
                                 color = TextGray,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -449,7 +466,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "A lista de compras está vazia",
+                            t("A lista de compras está vazia", "The shopping list is empty", isPortuguese),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextGray
                         )
@@ -465,7 +482,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                         ) {
                             Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Adicionar o primeiro item", fontWeight = FontWeight.Bold)
+                            Text(t("Adicionar o primeiro item", "Add the first item", isPortuguese), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -480,7 +497,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                 // A dica visual no topo da lista
                 item {
                     Text(
-                        text = "Desliza para a esquerda para apagar",
+
+                        t("Desliza para a esquerda para apagar", "Slide to the left to delete", isPortuguese),
                         color = TextGray,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -661,7 +679,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                                     )
                                     if (item.quantity > 1) {
                                         Text(
-                                            text = "Qtd: ${item.quantity}",
+                                            t("Quantidade: ${item.quantity}", "Ammount: $item.quantity", isPortuguese),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = animatedAlpha)
                                         )
@@ -669,7 +687,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                                 }
                                 // Botão de Informação à direita
                                 IconButton(onClick = { itemToShowDetails = item }) {
-                                    Icon(Icons.Rounded.Info, contentDescription = "Detalhes", tint = PrimaryAccent)
+                                    Icon(Icons.Rounded.Info, contentDescription = t("Detalhes", "Details", isPortuguese), tint = PrimaryAccent)
                                 }
                             }
                         }
@@ -683,6 +701,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
     // Se a variável 'showDialog' for verdadeira, desenha o nosso ecrã de adicionar item por cima de tudo
     if (showDialog) {
         AddItemDialog(
+            isPt = isPortuguese,
             suggestions = suggestions,
             onAddSuggestion = { nomeSugestao ->
                 scope.launch {
@@ -716,6 +735,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
     /// Se houver um item selecionado para editar, mostra o pop-up
     itemToEdit?.let { item ->
         EditItemDialog(
+            isPt = isPortuguese,
             item = item,
             onDismiss = { itemToEdit = null },
             onConfirm = { novoNome, novaQuantidade ->
@@ -749,6 +769,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
     // Pop-up dos Detalhes do Item
     itemToShowDetails?.let { item ->
         ItemDetailsDialog(
+            isPt = isPortuguese,
             item = item,
             onFetchFullItem = { id ->
                 try { client.getItem(id) } catch (e: Exception) { null }
@@ -780,12 +801,13 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
     // Pop-up de Confirmação para limpar tudo
     if (showClearConfirmDialog) {
         AlertDialog(
+
             onDismissRequest = { showClearConfirmDialog = false },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             titleContentColor = PrimaryAccent,
             textContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("Limpar Comprados", fontWeight = FontWeight.Bold) },
-            text = { Text("Tens a certeza que queres apagar todos os itens que já foram comprados? Esta ação não pode ser desfeita.") },
+            title = { Text(t("Limpar Comprados", "Clear Bought", isPortuguese), fontWeight = FontWeight.Bold) },
+            text = { Text(t("Tens a certeza que queres apagar todos os itens que já foram comprados? Esta ação não pode ser desfeita.", "Are you sure you want to clear all bought items?", isPortuguese)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -805,17 +827,26 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White),
                     shape = RoundedCornerShape(50)
                 ) {
-                    Text("Apagar Tudo", fontWeight = FontWeight.Bold)
+                    Text(t("Apagar Tudo", "Clear All", isPortuguese), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirmDialog = false }) {
-                    Text("Cancelar", color = TextGray)
+                    Text(t("Cancelar", "Cancel", isPortuguese), color = TextGray)
                 }
             }
         )
     }
 
+    if (showSettingsDialog) {
+        SettingsDialog(
+            isDarkTheme = isDarkTheme,
+            onThemeChange = { onToggleTheme() }, // Chama a função que veio por parâmetro
+            isPt = isPortuguese,
+            onLanguageChange = onLanguageChange, // Passa a função que veio por parâmetro!
+            onDismiss = { showSettingsDialog = false } // Aqui podes mudar, porque é local
+        )
+    }
 
 }
 
@@ -825,6 +856,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AddItemDialog(
+    isPt: Boolean,
     suggestions: List<QuickSuggestion>,
     onAddSuggestion: (String) -> Unit,
     onDeleteSuggestion: (String) -> Unit,
@@ -846,8 +878,7 @@ fun AddItemDialog(
 
                 // --- ÁREA DAS SUGESTÕES RÁPIDAS ---
                 if (suggestions.isNotEmpty()) {
-                    Text("Sugestões Rápidas (Pressiona para apagar):", style = MaterialTheme.typography.labelMedium, color = TextGray)
-
+                    Text(t("Sugestões Rápidas (pressiona para apagar):", "Quick Suggestions (long press to delete):", isPt), style = MaterialTheme.typography.labelMedium, color = TextGray)
                     androidx.compose.foundation.lazy.LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -884,7 +915,7 @@ fun AddItemDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nome (ex: Arroz)") },
+                    label = { Text(t("Nome (ex: Arroz)", "Name (ex: Rice)", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -898,7 +929,7 @@ fun AddItemDialog(
                 OutlinedTextField(
                     value = quantity,
                     onValueChange = { quantity = it },
-                    label = { Text("Quantidade") },
+                    label = { Text(t("Quantidade", "Quantity", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -916,7 +947,7 @@ fun AddItemDialog(
                         onCheckedChange = { saveAsSuggestion = it },
                         colors = CheckboxDefaults.colors(checkedColor = PrimaryAccent)
                     )
-                    Text("Guardar como sugestão rápida", style = MaterialTheme.typography.bodyMedium)
+                    Text(t("Guardar como sugestão rápida", "Save as quick suggestion", isPt), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -931,12 +962,12 @@ fun AddItemDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
-                Text("Adicionar", fontWeight = FontWeight.Bold)
+                Text(t("Adicionar", "Add", isPt), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = TextGray)) {
-                Text("Cancelar")
+                Text(t("Cancelar", "Cancel", isPt))
             }
         }
     )
@@ -944,6 +975,7 @@ fun AddItemDialog(
 
 @Composable
 fun EditItemDialog(
+    isPt: Boolean,
     item: ShoppingItem,
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
@@ -957,13 +989,13 @@ fun EditItemDialog(
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         titleContentColor = PrimaryAccent,
         textContentColor = MaterialTheme.colorScheme.onSurface,
-        title = { Text("Editar Item", fontWeight = FontWeight.Bold) },
+        title = { Text(t("Editar Item", "Edit Item", isPt), fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nome") },
+                    label = { Text(t("Nome", "Name", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -975,7 +1007,7 @@ fun EditItemDialog(
                 OutlinedTextField(
                     value = quantity,
                     onValueChange = { quantity = it },
-                    label = { Text("Quantidade") },
+                    label = { Text(t("Quantidade", "Ammount", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -992,7 +1024,7 @@ fun EditItemDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
-                Text("Guardar", fontWeight = FontWeight.Bold)
+                Text(t("Guardar", "Save", isPt), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -1000,7 +1032,7 @@ fun EditItemDialog(
                 onClick = onDismiss,
                 colors = ButtonDefaults.textButtonColors(contentColor = TextGray)
             ) {
-                Text("Cancelar")
+                Text(t("Cancelar", "Cancel", isPt))
             }
         }
     )
@@ -1009,6 +1041,7 @@ fun EditItemDialog(
 @OptIn(ExperimentalEncodingApi::class) // Dizemos ao Kotlin que queremos usar o Base64 novo
 @Composable
 fun ItemDetailsDialog(
+    isPt: Boolean,
     item: ShoppingItem,
     onFetchFullItem: suspend (String) -> ShoppingItem?,
     onDismiss: () -> Unit,
@@ -1065,14 +1098,14 @@ fun ItemDetailsDialog(
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         titleContentColor = PrimaryAccent,
         textContentColor = MaterialTheme.colorScheme.onSurface,
-        title = { Text("Detalhes: ${item.name}", fontWeight = FontWeight.Bold) },
+        title = { Text(t("Detalhes: ${item.name}", "Details: ${item.name}", isPt), fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // 1. Campo para as Notas Específicas
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notas (ex: Marca Mimosa)") },
+                    label = { Text(t("Notas (ex: Marca Mimosa)", "Details (ex: Brand)", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryAccent,
                         focusedLabelColor = PrimaryAccent,
@@ -1104,13 +1137,13 @@ fun ItemDetailsDialog(
                                 contentScale = ContentScale.Crop
                             )
                         } else {
-                            Text("Erro ao carregar imagem", color = ErrorRed)
+                            Text(t("Erro ao carregar imagem", "Error loading image", isPt), color = ErrorRed)
                         }
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = TextGray, modifier = Modifier.size(36.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Tocar para adicionar foto", color = TextGray, style = MaterialTheme.typography.bodySmall)
+                            Text(t("Tocar para adicionar foto", "Tap to add photo", isPt), color = TextGray, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -1128,12 +1161,77 @@ fun ItemDetailsDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
-                Text("Guardar", fontWeight = FontWeight.Bold)
+                Text(t("Guardar", "Save", isPt), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = TextGray)) {
-                Text("Cancelar")
+                Text(t("Cancelar", "Cancel", isPt))
+            }
+        }
+    )
+}
+
+// Função auxiliar para traduzir o texto
+fun t(pt: String, en: String, isPt: Boolean): String {
+    return if (isPt) pt else en
+}
+
+@Composable
+fun SettingsDialog(
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    isPt: Boolean,
+    onLanguageChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = PrimaryAccent,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Settings, contentDescription = null, tint = PrimaryAccent)
+                Spacer(Modifier.width(8.dp))
+                Text(t("Definições", "Settings", isPt), fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+
+                // 1. Linha do Tema Claro/Escuro
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(!isDarkTheme) }
+                ) {
+                    Icon(if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode, contentDescription = null, tint = TextGray)
+                    Spacer(Modifier.width(12.dp))
+                    Text(t("Tema Escuro", "Dark Theme", isPt), modifier = Modifier.weight(1f))
+                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
+
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                // 2. Linha do Idioma
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onLanguageChange(!isPt) }
+                ) {
+                    Icon(Icons.Rounded.Language, contentDescription = null, tint = TextGray)
+                    Spacer(Modifier.width(12.dp))
+                    Text(t("Português (PT)", "English (EN)", isPt), modifier = Modifier.weight(1f))
+                    Switch(checked = !isPt, onCheckedChange = { onLanguageChange(!it) })
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(t("Fechar", "Close", isPt), fontWeight = FontWeight.Bold)
             }
         }
     )
