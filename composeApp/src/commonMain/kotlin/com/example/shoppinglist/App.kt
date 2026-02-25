@@ -49,6 +49,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Language
 import com.example.shoppinglist.t
+import kotlinx.serialization.encodeToString
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 
 
 // ============================================================================
@@ -231,6 +234,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     // ------------------------------------------------------------------------
     val client = remember { ShoppingClient(familyCode) }
 
+    val settings = remember { Settings() }
+
     // mutableStateListOf é uma lista especial: se adicionares ou removeres algo, o ecrã atualiza sozinho!
     val items = remember { mutableStateListOf<ShoppingItem>() }
 
@@ -259,64 +264,114 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
     var showSettingsDialog by remember { mutableStateOf(false) }
 
+    val categorias = listOf("Supermercado", "Farmácia", "Outros")
+    var selectedCategory by remember { mutableStateOf(categorias.first()) }
+
+    val saveToCache = {
+        try {
+            // Transforma a lista em texto e guarda-a
+            val itemsJson = Json.encodeToString(items.toList())
+            val sugJson = Json.encodeToString(suggestions.toList())
+            settings.putString("CACHE_ITEMS_$familyCode", itemsJson)
+            settings.putString("CACHE_SUGS_$familyCode", sugJson)
+        } catch (e: Exception) { println("Erro ao guardar cache: ${e.message}") }
+    }
+
     // ------------------------------------------------------------------------
     // CICLO DE VIDA E WEBSOCKETS
     // ------------------------------------------------------------------------
     // O LaunchedEffect(Unit) é o código que corre UMA ÚNICA VEZ quando a App abre.
     LaunchedEffect(Unit) {
-        // 1. Tenta carregar a lista inicial
-        try {
-            isLoading = true // Liga a rodinha
-            items.clear()
-            suggestions.clear()
-            items.addAll(client.getItems())
-            suggestions.addAll(client.getSuggestions())
-        } catch (e: Exception) {
-            println("Erro inicial: ${e.message}")
-        } finally {
-            isLoading = false // Desliga a rodinha (quer corra bem ou mal)
+        // -------------------------------------------------------------
+        // FASE 1: LEITURA OFFLINE INSTANTÂNEA
+        // -------------------------------------------------------------
+        val cachedItems = settings.getString("CACHE_ITEMS_$familyCode", "")
+        val cachedSugs = settings.getString("CACHE_SUGS_$familyCode", "")
+
+        if (cachedItems.isNotEmpty()) {
+            try {
+                // Se houver memória, mostra logo no ecrã!
+                items.clear()
+                items.addAll(Json.decodeFromString<List<ShoppingItem>>(cachedItems))
+
+                if (cachedSugs.isNotEmpty()) {
+                    suggestions.clear()
+                    suggestions.addAll(Json.decodeFromString<List<QuickSuggestion>>(cachedSugs))
+                }
+
+                // Como já temos dados para mostrar, desligamos a rodinha logo!
+                isLoading = false
+            } catch (e: Exception) { println("Erro na cache, vamos ignorar.") }
+        } else {
+            // Se for a primeira vez que abrimos a app e a cache estiver vazia, liga a rodinha.
+            isLoading = true
         }
 
-        // Logica inteligente do websocket
-        // O .collect() fica à escuta dos novos eventos em JSON
+        // -------------------------------------------------------------
+        // FASE 2: ATUALIZAÇÃO SILENCIOSA PELA INTERNET
+        // -------------------------------------------------------------
+        try {
+            val netItems = client.getItems()
+            val netSugs = client.getSuggestions()
+
+            // Atualiza o ecrã com as novidades da net
+            items.clear()
+            items.addAll(netItems)
+            suggestions.clear()
+            suggestions.addAll(netSugs)
+
+            // Tira a "fotografia" para guardar esta versão atualizada para amanhã!
+            saveToCache()
+        } catch (e: Exception) {
+            println("Sem internet! O Modo Offline está a aguentar a app: ${e.message}")
+        } finally {
+            isLoading = false
+        }
+
+        // -------------------------------------------------------------
+        // FASE 3: WEBSOCKET A LÓGICA INTELIGENTE
+        // -------------------------------------------------------------
         client.listenForUpdates().collect { jsonText ->
             try {
-                // Descodifica o texto que o servidor enviou para o objeto WsMessage
                 val message = Json.decodeFromString<WsMessage>(jsonText)
+                var houveAlteracao = false
 
-                // Mexe APENAS na lista local (`items`), sem gastar internet extra
                 when (message.action) {
                     "ADD" -> {
                         message.item?.let { newItem ->
-                            // Só adiciona se o item não existir já na nossa lista
+                            // Vemos se o ID do item da lista (it) é igual ao do novo (newItem)
                             if (items.none { it.id == newItem.id }) {
                                 items.add(newItem)
+                                houveAlteracao = true
                             }
                         }
                     }
                     "UPDATE" -> {
                         message.item?.let { updatedItem ->
-                            // Procura a gaveta exata deste item e substitui-o
                             val index = items.indexOfFirst { it.id == updatedItem.id }
                             if (index != -1) {
                                 items[index] = updatedItem
+                                houveAlteracao = true
                             }
                         }
                     }
                     "DELETE" -> {
                         message.itemId?.let { idToApagar ->
-                            // Remove o cartão que tem este ID
-                            items.removeAll { it.id == idToApagar }
+                            val apagou = items.removeAll { it.id == idToApagar }
+                            if (apagou) houveAlteracao = true
                         }
                     }
                     "DELETE_BOUGHT" -> {
-                        // Remove da lista todos os que têm o visto
-                        items.removeAll { it.isBought }
+                        val apagou = items.removeAll { it.isBought }
+                        if (apagou) houveAlteracao = true
                     }
                 }
+
+                // Se o servidor mandou algo e alterámos a lista, atualizamos a cache!
+                if (houveAlteracao) saveToCache()
+
             } catch (e: Exception) {
-                // Se a mensagem vier corrompida ou ainda for o velho "REFRESH", apenas ignoramos
-                println("Erro ao decifrar evento do servidor: ${e.message}")
+                println("Erro ao decifrar evento: ${e.message}")
             }
         }
     }
@@ -356,67 +411,59 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     }
                 )
 
+                val itemsDaCategoria = items.filter { it.category == selectedCategory }
+
                 // BARRA DE PROGRESSO
                 // Só mostramos a barra se a lista não estiver vazia
-                if (items.isNotEmpty()) {
-                    val totalItems = items.size
-                    val boughtItems = items.count { it.isBought }
+                if (itemsDaCategoria.isNotEmpty()) {
+                    val totalItems = itemsDaCategoria.size
+                    val boughtItems = itemsDaCategoria.count { it.isBought }
                     val progress = boughtItems.toFloat() / totalItems.toFloat()
 
-                    // Animação suave para a barra encher
-                    val animatedProgress by animateFloatAsState(
-                        targetValue = progress,
-                        animationSpec = tween(durationMillis = 500)
-                    )
-
-                    // Quando chega aos 100%, a barra muda de Azul Ciano para Verde!
+                    val animatedProgress by animateFloatAsState(targetValue = progress, animationSpec = tween(500))
                     val progressColor by animateColorAsState(
                         targetValue = if (boughtItems == totalItems) Color(0xFF4CAF50) else PrimaryAccent,
-                        animationSpec = tween(durationMillis = 500)
+                        animationSpec = tween(500)
                     )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 8.dp)
-                    ) {
-                        // Os Textos por cima da barra
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                t("Progresso", "Progress", isPortuguese),
-                                color = TextGray,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(t("Progresso", "Progress", isPortuguese), color = TextGray, style = MaterialTheme.typography.bodySmall)
                             Text(
                                 text = "$boughtItems/$totalItems (${(progress * 100).toInt()}%)",
                                 color = if (boughtItems == totalItems) progressColor else TextGray,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold
+                                style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold
                             )
                         }
-
                         Spacer(modifier = Modifier.height(6.dp))
-
-                        // A barra visual
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(50)) // Arredonda o contentor todo (fundo e frente)
-                                .background(MaterialTheme.colorScheme.surfaceVariant)   // A cor do fundo da barra (o trilho)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(animatedProgress) // A largura deste Box é a % do progresso!
-                                    .fillMaxHeight()
-                                    .background(progressColor)      // A cor do enchimento (Ciano ou Verde)
-                            )
+                        Box(modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                            Box(modifier = Modifier.fillMaxWidth(animatedProgress).fillMaxHeight().background(progressColor))
                         }
                     }
+                }
+
+                // OS SEPARADORES DAS LISTAS (Tabs)
+                ScrollableTabRow(
+                    selectedTabIndex = categorias.indexOf(selectedCategory),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = PrimaryAccent,
+                    edgePadding = 16.dp, // Dá espaco nas bordas
+                    divider = {} // Remove a linha divisória padrão que fica por baixo
+                ) {
+                    categorias.forEach { categoria ->
+                        Tab(
+                            selected = selectedCategory == categoria,
+                            onClick = { selectedCategory = categoria },
+                            text = {
+                                Text(
+                                    text = categoria,
+                                    fontWeight = if (selectedCategory == categoria) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selectedCategory == categoria) PrimaryAccent else TextGray
+                                )
+                            }
+                        )
+                    }
+
                 }
             }
                  },
@@ -449,7 +496,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             }
         }
         // "Empty State"
-        else if (items.isEmpty()) {
+        else if (items.filter { it.category == selectedCategory }.isEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(innerPadding),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -466,7 +513,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            t("A lista de compras está vazia", "The shopping list is empty", isPortuguese),
+                            t("A lista de $selectedCategory está vazia", "The $selectedCategory list is empty", isPortuguese),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextGray
                         )
@@ -511,7 +558,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             // Ajuda o Compose a saber quem é quem. Se apagares o item do meio, ele sabe exatamente qual cartão
             // remover, evitando bugs em que apaga o item errado visualmente.
                 // Os itens com isBought = false ficam em cima, isBought = true vão para baixo.
-            items(items.sortedBy { it.isBought }, key = { it.id }) { item ->
+                items(items.filter { it.category == selectedCategory }.sortedBy { it.isBought }, key = { it.id }) { item ->
                 // ----------------------------------------------------------------
                 // LÓGICA DO SWIPE (Deslizar para apagar)
                 // ----------------------------------------------------------------
@@ -535,8 +582,16 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                     if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
                                         jaDesfez = true
                                         snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
-                                        // Voltamos a adicionar o item ao servidor usando uma cópia com ID limpo (para gerar um novo)
-                                        client.addItem(item.copy(id = ""))
+
+                                        // Restaura com um novo ID único (e otimista!)
+                                        val uniqueId = kotlin.random.Random.nextLong().toString()
+                                        val itemRestaurado = item.copy(id = uniqueId)
+
+                                        items.add(itemRestaurado) // Aparece logo!
+                                        saveToCache()
+
+                                        // Mandamos para o servidor a nova versão
+                                        client.addItem(itemRestaurado)
                                     }
                                 } catch (e: Exception) {
                                     println("Erro: ${e.message}")
@@ -638,6 +693,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                             scope.launch {
                                                 try {
                                                     client.updateItem(updatedItem)
+                                                    saveToCache()
                                                     // Quando o servidor responder com REFRESH, a lista vai
                                                     // recarregar, mas o utilizador nem nota porque já está igual!
                                                 } catch (e: Exception) {
@@ -716,16 +772,33 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     try {
                         client.deleteSuggestion(idSugestao)
                         suggestions.removeAll { it.id == idSugestao } // Remove visualmente
+
                     } catch (e: Exception) { println("Erro ao apagar sugestão") }
                 }
             },
             onDismiss = { showDialog = false },
             onConfirm = { name, quantity ->
                 scope.launch {
-                    val newItem = ShoppingItem(name = name, quantity = quantity.toIntOrNull() ?: 1)
+                    // 1. geramos um id unico e aleatorio no telemovel
+                    val uniqueId = kotlin.random.Random.nextLong().toString()
+
+                    val newItem = ShoppingItem(
+                        id = uniqueId,
+                        name = name,
+                        quantity = quantity.toIntOrNull() ?: 1,
+                        category = selectedCategory
+                    )
+
+                    // 2. MAGIA OTIMISTA: Adiciona logo ao ecrã com o ID
+                    items.add(newItem)
+                    showDialog = false
+
+                    // 3. Tira a foto "Cache"
+                    saveToCache()
+
+                    // 4. Tenta mandar para o servidor em background
                     try {
                         client.addItem(newItem)
-                        showDialog = false
                     } catch (e: Exception) { println("Erro: ${e.message}") }
                 }
             }
@@ -752,6 +825,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     items[index] = updatedItem
                 }
                 itemToEdit = null // Fecha o pop-up sem esperar pelo servidor
+                saveToCache()
 
                 // 3. Envia para o servidor em background
                 scope.launch {
@@ -783,6 +857,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     items[index] = updatedItem
                 }
                 itemToShowDetails = null
+                saveToCache()
 
                 // 2. Manda para a nossa Base de Dados no Render
                 scope.launch {
@@ -815,6 +890,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         items.removeAll { it.isBought }
                         showClearConfirmDialog = false // Fecha o pop-up
 
+                        saveToCache()
                         // Manda o comando para o servidor em background
                         scope.launch {
                             try {
@@ -872,7 +948,7 @@ fun AddItemDialog(
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         titleContentColor = PrimaryAccent,
         textContentColor = MaterialTheme.colorScheme.onSurface,
-        title = { Text("Novo Item", fontWeight = FontWeight.Bold) },
+        title = { Text(t("Novo Item", "New Item", isPt), fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
