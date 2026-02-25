@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+
 @Serializable
 data class ShoppingItem(
     val id: String = "",
@@ -74,6 +75,11 @@ class ShoppingClient(private val familyCode: String) {
 
     suspend fun clearBoughtItems() {
         client.delete("$baseUrl/shopping-list/$familyCode/bought")
+    }
+
+    // Vai buscar apenas um item específico (com a foto inteira)
+    suspend fun getItem(id: String): ShoppingItem {
+        return client.get("$baseUrl/shopping-list/$familyCode/$id").body()
     }
 
     // A chamada do WebSocket fica muito mais simples de escrever assim:

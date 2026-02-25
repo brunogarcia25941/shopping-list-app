@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
 import com.preat.peekaboo.image.picker.ResizeOptions
 import kotlinx.serialization.json.Json
+import androidx.compose.material3.CircularProgressIndicator
 
 
 // ============================================================================
@@ -749,6 +750,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, onToggleTheme: 
     itemToShowDetails?.let { item ->
         ItemDetailsDialog(
             item = item,
+            onFetchFullItem = { id ->
+                try { client.getItem(id) } catch (e: Exception) { null }
+            },
             onDismiss = { itemToShowDetails = null },
             onConfirm = { updatedItem ->
 
@@ -1006,13 +1010,22 @@ fun EditItemDialog(
 @Composable
 fun ItemDetailsDialog(
     item: ShoppingItem,
+    onFetchFullItem: suspend (String) -> ShoppingItem?,
     onDismiss: () -> Unit,
     onConfirm: (ShoppingItem) -> Unit
 ) {
     var notes by remember { mutableStateOf(item.notes ?: "") }
     var photoBase64 by remember { mutableStateOf(item.photoBase64) }
+    var isLoadingPhoto by remember { mutableStateOf(true) } // Rodinha ligada por defeito
 
     val scope = rememberCoroutineScope()
+
+    // Assim que o pop-up abre, vai sacar a foto verdadeira
+    LaunchedEffect(item.id) {
+        val fullItem = onFetchFullItem(item.id)
+        photoBase64 = fullItem?.photoBase64
+        isLoadingPhoto = false // Desliga a rodinha
+    }
 
     val resizeOptions = ResizeOptions(
         width = 800, // Máximo de 800 píxeis de largura
@@ -1080,8 +1093,9 @@ fun ItemDetailsDialog(
                         .clickable { singleImagePicker.launch() },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (photoBase64 != null) {
-
+                    if (isLoadingPhoto) {
+                        CircularProgressIndicator(color = PrimaryAccent)
+                    } else if (photoBase64 != null) {
                         if (imageBitmap != null) {
                             Image(
                                 bitmap = imageBitmap,
