@@ -43,6 +43,7 @@ import com.preat.peekaboo.image.picker.SelectionMode
 import com.preat.peekaboo.image.picker.toImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import com.preat.peekaboo.image.picker.ResizeOptions
 import kotlinx.serialization.json.Json
 import androidx.compose.material3.CircularProgressIndicator
@@ -81,12 +82,23 @@ fun App() {
     }
 
 
+    var themeColorName by remember { mutableStateOf(settings.getString("THEME_COLOR", "Ocean")) }
 
     // Variável do Idioma
     var isPortuguese by remember { mutableStateOf(settings.getBoolean("IS_PT", true)) }
 
+    // Descobre qual é a cor que está escolhida
+    val selectedPrimaryColor = when (themeColorName) {
+        "Forest" -> Color(0xFF4CAF50)    // Verde Natureza
+        "Sunset" -> Color(0xFFFF9800)    // Laranja Pôr do Sol
+        "Amethyst" -> Color(0xFF9C27B0)  // Roxo Ametista
+        "Rose" -> Color(0xFFE91E63)      // Rosa Choque
+        else -> Color(0xFF5BC0BE)        // Ocean (O defeito)
+    }
+
     // 3. Escolhe o esquema de cores com base na variável
-    val currentScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
+    val baseScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
+    val currentScheme = baseScheme.copy(primary = selectedPrimaryColor)
 
     MaterialTheme(
         colorScheme = currentScheme,
@@ -118,7 +130,12 @@ fun App() {
                 isPortuguese = isPortuguese,
                 onLanguageChange = { newState ->
                     isPortuguese = newState // Muda a variável
-                    settings.putBoolean("IS_PT", newState) // Guarda na memória local!
+                    settings.putBoolean("IS_PT", newState) // Guarda na memória local
+                },
+                themeColorName = themeColorName,
+                onThemeColorChange = { newColor ->
+                    themeColorName = newColor
+                    settings.putString("THEME_COLOR", newColor) // Guarda na memória local
                 },
                 onLogout = {
                     settings.remove("FAMILY_CODE")
@@ -151,7 +168,7 @@ fun LoginScreen(isPt: Boolean, onEnter: (String) -> Unit) {
                 Text(
                     t("Bem-vindo", "Welcome", isPt),
                     style = MaterialTheme.typography.headlineMedium,
-                    color = PrimaryAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -165,8 +182,8 @@ fun LoginScreen(isPt: Boolean, onEnter: (String) -> Unit) {
                     onValueChange = { codeInput = it.uppercase() }, // Força a ficar tudo em maiúsculas
                     label = { Text(t("Código da Casa", "Family Code", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -178,7 +195,7 @@ fun LoginScreen(isPt: Boolean, onEnter: (String) -> Unit) {
                         if (codeInput.isNotBlank()) onEnter(codeInput)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.surfaceVariant)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Text(t("Entrar", "Login", isPt), fontWeight = FontWeight.Bold)
                 }
@@ -227,7 +244,7 @@ private val ModernLightScheme = lightColorScheme(
 // O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: Boolean, onLanguageChange: (Boolean) -> Unit, onToggleTheme: () -> Unit, onLogout: () -> Unit) {
+fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: Boolean, onLanguageChange: (Boolean) -> Unit, onToggleTheme: () -> Unit, themeColorName: String, onThemeColorChange: (String) -> Unit, onLogout: () -> Unit) {
     // ------------------------------------------------------------------------
     // GESTÃO DE ESTADO (State Management)
     // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
@@ -384,7 +401,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(t("Casa: $familyCode", "Home: $familyCode", isPortuguese), fontWeight = FontWeight.Bold, color = PrimaryAccent)
+                        Text(t("Casa: $familyCode", "Home: $familyCode", isPortuguese), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -395,18 +412,18 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                             Icon(
                                 imageVector = Icons.Rounded.Settings,
                                 contentDescription = t("Definições", "Settings", isPortuguese),
-                                tint = PrimaryAccent
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                         // Botão de Limpar
                         if (items.any { it.isBought }) {
                             IconButton(onClick = { showClearConfirmDialog = true }) {
-                                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = PrimaryAccent)
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                         // Botão de Sair
                         IconButton(onClick = onLogout) {
-                            Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = PrimaryAccent)
+                            Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 )
@@ -422,7 +439,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
                     val animatedProgress by animateFloatAsState(targetValue = progress, animationSpec = tween(500))
                     val progressColor by animateColorAsState(
-                        targetValue = if (boughtItems == totalItems) Color(0xFF4CAF50) else PrimaryAccent,
+                        targetValue = if (boughtItems == totalItems) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
                         animationSpec = tween(500)
                     )
 
@@ -446,7 +463,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                 ScrollableTabRow(
                     selectedTabIndex = categorias.indexOf(selectedCategory),
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = PrimaryAccent,
+                    contentColor = MaterialTheme.colorScheme.primary,
                     edgePadding = 16.dp, // Dá espaco nas bordas
                     divider = {} // Remove a linha divisória padrão que fica por baixo
                 ) {
@@ -458,7 +475,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                 Text(
                                     text = categoria,
                                     fontWeight = if (selectedCategory == categoria) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (selectedCategory == categoria) PrimaryAccent else TextGray
+                                    color = if (selectedCategory == categoria) MaterialTheme.colorScheme.primary else TextGray
                                 )
                             }
                         )
@@ -471,7 +488,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true }, // Ao clicar, muda a variável para abrir o pop-up
-                containerColor = PrimaryAccent,
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(50) // Faz com que o botão seja uma bola perfeita
             ) {
@@ -489,7 +506,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    color = PrimaryAccent,
+                    color = MaterialTheme.colorScheme.primary,
                     strokeWidth = 4.dp,
                     modifier = Modifier.size(48.dp) // Fica com um tamanho simpático
                 )
@@ -523,7 +540,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         // Botão que faz a mesma coisa que o '+' flutuante
                         Button(
                             onClick = { showDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.background),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.background),
                             shape = RoundedCornerShape(50),
                             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                         ) {
@@ -670,7 +687,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                     )
                                 )
                                 val checkColor by animateColorAsState(
-                                    targetValue = if (item.isBought) PrimaryAccent else TextGray
+                                    targetValue = if (item.isBought) MaterialTheme.colorScheme.primary else TextGray
                                 )
                                 // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
                                 Box(
@@ -743,7 +760,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                 }
                                 // Botão de Informação à direita
                                 IconButton(onClick = { itemToShowDetails = item }) {
-                                    Icon(Icons.Rounded.Info, contentDescription = t("Detalhes", "Details", isPortuguese), tint = PrimaryAccent)
+                                    Icon(Icons.Rounded.Info, contentDescription = t("Detalhes", "Details", isPortuguese), tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }
@@ -879,7 +896,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
             onDismissRequest = { showClearConfirmDialog = false },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            titleContentColor = PrimaryAccent,
+            titleContentColor = MaterialTheme.colorScheme.primary,
             textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text(t("Limpar Comprados", "Clear Bought", isPortuguese), fontWeight = FontWeight.Bold) },
             text = { Text(t("Tens a certeza que queres apagar todos os itens que já foram comprados? Esta ação não pode ser desfeita.", "Are you sure you want to clear all bought items?", isPortuguese)) },
@@ -920,6 +937,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             onThemeChange = { onToggleTheme() }, // Chama a função que veio por parâmetro
             isPt = isPortuguese,
             onLanguageChange = onLanguageChange, // Passa a função que veio por parâmetro!
+            themeColorName = themeColorName,
+            onThemeColorChange = onThemeColorChange,
             onDismiss = { showSettingsDialog = false } // Aqui podes mudar, porque é local
         )
     }
@@ -946,7 +965,7 @@ fun AddItemDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        titleContentColor = PrimaryAccent,
+        titleContentColor = MaterialTheme.colorScheme.primary,
         textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text(t("Novo Item", "New Item", isPt), fontWeight = FontWeight.Bold) },
         text = {
@@ -978,7 +997,7 @@ fun AddItemDialog(
                                     text = sug.name,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = PrimaryAccent,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -993,8 +1012,8 @@ fun AddItemDialog(
                     onValueChange = { name = it },
                     label = { Text(t("Nome (ex: Arroz)", "Name (ex: Rice)", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -1007,8 +1026,8 @@ fun AddItemDialog(
                     onValueChange = { quantity = it },
                     label = { Text(t("Quantidade", "Quantity", isPt),) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -1021,7 +1040,7 @@ fun AddItemDialog(
                     Checkbox(
                         checked = saveAsSuggestion,
                         onCheckedChange = { saveAsSuggestion = it },
-                        colors = CheckboxDefaults.colors(checkedColor = PrimaryAccent)
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                     )
                     Text(t("Guardar como sugestão rápida", "Save as quick suggestion", isPt), style = MaterialTheme.typography.bodyMedium)
                 }
@@ -1035,7 +1054,7 @@ fun AddItemDialog(
                     }
                     onConfirm(name, quantity)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Adicionar", "Add", isPt), fontWeight = FontWeight.Bold)
@@ -1063,7 +1082,7 @@ fun EditItemDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        titleContentColor = PrimaryAccent,
+        titleContentColor = MaterialTheme.colorScheme.primary,
         textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text(t("Editar Item", "Edit Item", isPt), fontWeight = FontWeight.Bold) },
         text = {
@@ -1073,8 +1092,8 @@ fun EditItemDialog(
                     onValueChange = { name = it },
                     label = { Text(t("Nome", "Name", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -1085,8 +1104,8 @@ fun EditItemDialog(
                     onValueChange = { quantity = it },
                     label = { Text(t("Quantidade", "Ammount", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -1097,7 +1116,7 @@ fun EditItemDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(name, quantity) },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Guardar", "Save", isPt), fontWeight = FontWeight.Bold)
@@ -1172,7 +1191,7 @@ fun ItemDetailsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        titleContentColor = PrimaryAccent,
+        titleContentColor = MaterialTheme.colorScheme.primary,
         textContentColor = MaterialTheme.colorScheme.onSurface,
         title = { Text(t("Detalhes: ${item.name}", "Details: ${item.name}", isPt), fontWeight = FontWeight.Bold) },
         text = {
@@ -1183,8 +1202,8 @@ fun ItemDetailsDialog(
                     onValueChange = { notes = it },
                     label = { Text(t("Notas (ex: Marca Mimosa)", "Details (ex: Brand)", isPt)) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -1203,7 +1222,7 @@ fun ItemDetailsDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingPhoto) {
-                        CircularProgressIndicator(color = PrimaryAccent)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     } else if (photoBase64 != null) {
                         if (imageBitmap != null) {
                             Image(
@@ -1234,7 +1253,7 @@ fun ItemDetailsDialog(
                     )
                     onConfirm(updatedItem)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Guardar", "Save", isPt), fontWeight = FontWeight.Bold)
@@ -1259,16 +1278,21 @@ fun SettingsDialog(
     onThemeChange: (Boolean) -> Unit,
     isPt: Boolean,
     onLanguageChange: (Boolean) -> Unit,
+
+    // Recebe as variáveis
+    themeColorName: String,
+    onThemeColorChange: (String) -> Unit,
+
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        titleContentColor = PrimaryAccent,
+        titleContentColor = MaterialTheme.colorScheme.primary, // <--- Atenção aqui, já usa a cor nova!
         textContentColor = MaterialTheme.colorScheme.onSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Settings, contentDescription = null, tint = PrimaryAccent)
+                Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text(t("Definições", "Settings", isPt), fontWeight = FontWeight.Bold)
             }
@@ -1277,10 +1301,8 @@ fun SettingsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
                 // 1. Linha do Tema Claro/Escuro
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { onThemeChange(!isDarkTheme) }
-                ) {
+
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onThemeChange(!isDarkTheme) }) {
                     Icon(if (isDarkTheme) Icons.Rounded.DarkMode else Icons.Rounded.LightMode, contentDescription = null, tint = TextGray)
                     Spacer(Modifier.width(12.dp))
                     Text(t("Tema Escuro", "Dark Theme", isPt), modifier = Modifier.weight(1f))
@@ -1290,21 +1312,64 @@ fun SettingsDialog(
                 Divider(color = TextGray.copy(alpha = 0.2f))
 
                 // 2. Linha do Idioma
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { onLanguageChange(!isPt) }
-                ) {
+
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onLanguageChange(!isPt) }) {
                     Icon(Icons.Rounded.Language, contentDescription = null, tint = TextGray)
                     Spacer(Modifier.width(12.dp))
                     Text(t("Português (PT)", "English (EN)", isPt), modifier = Modifier.weight(1f))
                     Switch(checked = !isPt, onCheckedChange = { onLanguageChange(!it) })
+                }
+
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                // -------------------------------------------------------------
+                // 3. A GALERIA DE CORES ("O Camaleão")
+                // -------------------------------------------------------------
+                Text(t("Cor de Destaque", "Accent Color", isPt), color = TextGray, style = MaterialTheme.typography.labelMedium)
+
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    // A nossa lista de cores com os respetivos códigos
+                    val colorOptions = listOf(
+                        "Ocean" to Color(0xFF5BC0BE),
+                        "Forest" to Color(0xFF4CAF50),
+                        "Sunset" to Color(0xFFFF9800),
+                        "Amethyst" to Color(0xFF9C27B0),
+                        "Rose" to Color(0xFFE91E63)
+                    )
+
+                    colorOptions.forEach { (name, color) ->
+                        val isSelected = themeColorName == name
+
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp) // Tamanho da bolinha
+                                .clip(CircleShape)
+                                .background(color)
+                                .clickable { onThemeColorChange(name) }
+                                // Desenha um anel branco à volta se estiver selecionado
+                                .border(
+                                    width = if (isSelected) 3.dp else 0.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // Põe um vistozinho na cor que está ativa
+                            if (isSelected) {
+                                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent, contentColor = MaterialTheme.colorScheme.onBackground),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Fechar", "Close", isPt), fontWeight = FontWeight.Bold)
