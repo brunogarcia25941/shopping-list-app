@@ -1,5 +1,7 @@
 package com.example.shoppinglist
 
+
+
 interface Platform {
     val name: String
 }

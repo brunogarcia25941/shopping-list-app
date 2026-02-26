@@ -33,6 +33,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation("io.ktor:ktor-client-okhttp:2.3.7")
+            implementation("com.google.android.gms:play-services-ads:23.0.0")
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)

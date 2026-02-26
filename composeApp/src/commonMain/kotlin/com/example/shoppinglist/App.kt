@@ -53,6 +53,7 @@ import com.example.shoppinglist.t
 import kotlinx.serialization.encodeToString
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.runtime.Composable
 
 
 // ============================================================================
@@ -494,6 +495,12 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             ) {
                 Icon(Icons.Rounded.Add, contentDescription = "Adicionar", modifier = Modifier.size(28.dp))
             } },
+
+        // barra de publicidade
+        bottomBar = {
+            AdBanner()
+        },
+
         containerColor = MaterialTheme.colorScheme.surfaceVariant // Garante que a zona central atrás da lista é escura
     ) { innerPadding ->
 
@@ -1377,3 +1384,7 @@ fun SettingsDialog(
         }
     )
 }
+
+
+
+expect @Composable fun AdBanner()
