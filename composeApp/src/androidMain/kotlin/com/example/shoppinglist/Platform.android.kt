@@ -20,6 +20,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
 }
@@ -84,10 +85,9 @@ class AndroidVibrator(private val context: Context) : NativeVibrator {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // AQUI ESTÁ O TEU CONTROLO!
             // 50 = tempo em milissegundos (rápido e seco)
             // 255 = Força máxima do motor (vai de 1 a 255)
-            vibrator.vibrate(VibrationEffect.createOneShot(50, 255))
+            vibrator.vibrate(VibrationEffect.createOneShot(30, 200))
         } else {
             @Suppress("DEPRECATION")
             vibrator.vibrate(30)
@@ -99,4 +99,23 @@ class AndroidVibrator(private val context: Context) : NativeVibrator {
 actual fun rememberNativeVibrator(): NativeVibrator {
     val context = LocalContext.current
     return remember { AndroidVibrator(context) }
+}
+
+class AndroidShareManager(private val context: Context) : ShareManager {
+    override fun shareText(text: String) {
+        val sendIntent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, text)
+            type = "text/plain"
+        }
+        val shareIntent = Intent.createChooser(sendIntent, "Partilhar Lista")
+        shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(shareIntent)
+    }
+}
+
+@Composable
+actual fun rememberShareManager(): ShareManager {
+    val context = LocalContext.current
+    return remember { AndroidShareManager(context) }
 }

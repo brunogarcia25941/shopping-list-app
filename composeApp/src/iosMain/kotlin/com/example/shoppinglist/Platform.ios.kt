@@ -9,6 +9,8 @@ import org.jetbrains.skia.EncodedImageFormat
 import platform.UIKit.UIImpactFeedbackGenerator
 import platform.UIKit.UIImpactFeedbackStyle
 import androidx.compose.runtime.remember
+import platform.UIKit.UIActivityViewController
+import platform.UIKit.UIApplication
 class IOSPlatform: Platform {
     override val name: String = UIDevice.currentDevice.systemName() + " " + UIDevice.currentDevice.systemVersion
 }
@@ -49,4 +51,21 @@ class IosVibrator : NativeVibrator {
 @Composable
 actual fun rememberNativeVibrator(): NativeVibrator {
     return remember { IosVibrator() }
+}
+
+class IosShareManager : ShareManager {
+    override fun shareText(text: String) {
+        val window = UIApplication.sharedApplication.keyWindow
+        val rootViewController = window?.rootViewController
+
+        if (rootViewController != null) {
+            val activityVC = UIActivityViewController(activityItems = listOf(text), applicationActivities = null)
+            rootViewController.presentViewController(activityVC, animated = true, completion = null)
+        }
+    }
+}
+
+@Composable
+actual fun rememberShareManager(): ShareManager {
+    return remember { IosShareManager() }
 }

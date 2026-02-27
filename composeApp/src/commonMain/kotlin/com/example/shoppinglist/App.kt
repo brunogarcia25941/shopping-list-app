@@ -58,6 +58,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.material.icons.rounded.Share
 
 
 // ============================================================================
@@ -147,6 +148,8 @@ fun App() {
                     settings.putString("THEME_COLOR", newColor) // Guarda na memória local
                 },
                 onLogout = {
+                    settings.remove("CACHE_ITEMS_$loggedFamilyCode")
+                    settings.remove("CACHE_SUGS_$loggedFamilyCode")
                     settings.remove("FAMILY_CODE")
                     loggedFamilyCode = ""
                 }
@@ -339,6 +342,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     // motor de vibração (Haptics)
     val vibrator = rememberNativeVibrator()
 
+    val shareManager = rememberShareManager()
+
     // Controlador daquela barra preta que aparece no fundo (Snackbar) com o botão "Desfazer"
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -404,6 +409,13 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             saveToCache()
         } catch (e: Exception) {
             println("Sem internet! O Modo Offline está a aguentar a app: ${e.message}")
+            // Avisa o utilizador que falhou a sincronização inicial
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = t("A mostrar lista offline. A sincronizar...", "Showing offline list. Syncing...", isPortuguese),
+                    duration = SnackbarDuration.Short
+                )
+            }
         } finally {
             isLoading = false
         }
@@ -496,6 +508,20 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
                     actions = {
+
+                        IconButton(onClick = {
+                            // 1. Cria a mensagem
+                            val mensagem = formatShoppingList(items, isPortuguese, familyCode)
+                            // 2. Chama o ecrã de partilha do telemóvel
+                            shareManager.shareText(mensagem)
+                        }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Share,
+                                contentDescription = t("Partilhar", "Share", isPortuguese),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         //botao de definicoes
                         IconButton(onClick = { showSettingsDialog = true }) {
                             Icon(
@@ -510,6 +536,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                 Icon(Icons.Rounded.DeleteSweep, contentDescription = "Limpar Comprados", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
+
+
                         // Botão de Sair
                         IconButton(onClick = onLogout) {
                             Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = MaterialTheme.colorScheme.primary)
@@ -1506,6 +1534,36 @@ fun SettingsDialog(
     )
 }
 
+// Função para desenhar a mensagem do WhatsApp!
+fun formatShoppingList(items: List<ShoppingItem>, isPt: Boolean, familyCode: String): String {
+    val sb = StringBuilder()
+
+    // Título
+    val title = t("🛒 Lista de Compras da Casa ($familyCode)", "🛒 Shopping List ($familyCode)", isPt)
+    sb.append("$title\n")
+    sb.append("--------------------------\n")
+
+    // Separamos o que falta comprar do que já está comprado
+    val toBuy = items.filter { !it.isBought }
+    val bought = items.filter { it.isBought }
+
+    if (toBuy.isNotEmpty()) {
+        sb.append(t("\n📝 Falta comprar:\n", "\n📝 To buy:\n", isPt))
+        toBuy.forEach { item ->
+            val notes = if (!item.notes.isNullOrBlank()) " (${item.notes})" else ""
+            sb.append("- ${item.quantity}x ${item.name}$notes\n")
+        }
+    }
+
+    if (bought.isNotEmpty()) {
+        sb.append(t("\n✅ Já no carrinho:\n", "\n✅ Already in cart:\n", isPt))
+        bought.forEach { item ->
+            sb.append("- ${item.name}\n")
+        }
+    }
+
+    return sb.toString()
+}
 
 
 expect @Composable fun AdBanner()
@@ -1523,3 +1581,10 @@ interface NativeVibrator {
 // 2. Prometemos que sabemos criar este comando em qualquer sistema
 @Composable
 expect fun rememberNativeVibrator(): NativeVibrator
+
+// Interface do Gestor de Partilha
+interface ShareManager {
+    fun shareText(text: String)
+}
+@Composable
+expect fun rememberShareManager(): ShareManager

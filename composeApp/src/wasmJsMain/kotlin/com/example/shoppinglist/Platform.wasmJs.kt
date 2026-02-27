@@ -49,3 +49,20 @@ class WebVibrator : NativeVibrator {
 actual fun rememberNativeVibrator(): NativeVibrator {
     return remember { WebVibrator() }
 }
+
+
+class WebShareManager : ShareManager {
+    override fun shareText(text: String) {
+        // Usa JavaScript nativo para copiar para o Clipboard e dar um aviso
+        js("""
+            navigator.clipboard.writeText(text).then(function() {
+                alert('Lista copiada com sucesso! / List copied to clipboard!');
+            });
+        """)
+    }
+}
+
+@Composable
+actual fun rememberShareManager(): ShareManager {
+    return remember { WebShareManager() }
+}
