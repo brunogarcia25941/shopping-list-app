@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Star
 
 
 // ============================================================================
@@ -350,6 +351,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
     var showSettingsDialog by remember { mutableStateOf(false) }
 
+    var showManageSuggestionsDialog by remember { mutableStateOf(false) }
+
     val categorias = listOf("Supermercado", "Farmácia", "Outros")
     var selectedCategory by remember { mutableStateOf(categorias.first()) }
 
@@ -503,7 +506,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(t("Casa: $familyCode", "Home: $familyCode", isPortuguese), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(t(familyCode, familyCode, isPortuguese), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -1085,7 +1088,42 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             onLanguageChange = onLanguageChange, // Passa a função que veio por parâmetro!
             themeColorName = themeColorName,
             onThemeColorChange = onThemeColorChange,
+            onOpenManageSuggestions = {
+                // Fecha as definições e abre as sugestões!
+                showSettingsDialog = false
+                showManageSuggestionsDialog = true
+            },
+
             onDismiss = { showSettingsDialog = false } // Aqui podes mudar, porque é local
+        )
+    }
+
+
+
+    // Abre o Gestor de Sugestões
+    if (showManageSuggestionsDialog) {
+        ManageSuggestionsDialog(
+            isPt = isPortuguese,
+            suggestions = suggestions,
+            onAddSuggestion = { nomeSugestao ->
+                scope.launch {
+                    try {
+                        val nova = client.addSuggestion(nomeSugestao)
+                        suggestions.add(nova) // Adiciona localmente
+                        saveToCache()
+                    } catch (e: Exception) { println("Erro ao guardar sugestão") }
+                }
+            },
+            onDeleteSuggestion = { idSugestao ->
+                scope.launch {
+                    try {
+                        client.deleteSuggestion(idSugestao)
+                        suggestions.removeAll { it.id == idSugestao } // Apaga localmente
+                        saveToCache()
+                    } catch (e: Exception) { println("Erro ao apagar sugestão") }
+                }
+            },
+            onDismiss = { showManageSuggestionsDialog = false }
         )
     }
 
@@ -1513,7 +1551,7 @@ fun SettingsDialog(
     // Recebe as variáveis
     themeColorName: String,
     onThemeColorChange: (String) -> Unit,
-
+    onOpenManageSuggestions: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -1595,12 +1633,106 @@ fun SettingsDialog(
                         }
                     }
                 }
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                // 4. Abrir Gestão de Sugestões
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenManageSuggestions() }.padding(vertical = 4.dp)
+                ) {
+                    Icon(Icons.Rounded.Star, contentDescription = null, tint = TextGray)
+                    Spacer(Modifier.width(12.dp))
+                    Text(t("Gerir Sugestões Rápidas", "Manage Quick Suggestions", isPt), modifier = Modifier.weight(1f))
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(t("Fechar", "Close", isPt), fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun ManageSuggestionsDialog(
+    isPt: Boolean,
+    suggestions: List<QuickSuggestion>,
+    onAddSuggestion: (String) -> Unit,
+    onDeleteSuggestion: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newSuggestionName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = MaterialTheme.colorScheme.primary,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = { Text(t("Gerir Sugestões", "Manage Suggestions", isPt), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // 1. ÁREA DE ADICIONAR NOVA SUGESTÃO
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newSuggestionName,
+                        onValueChange = { newSuggestionName = it },
+                        label = { Text(t("Nova sugestão...", "New suggestion...", isPt)) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            if (newSuggestionName.isNotBlank()) {
+                                onAddSuggestion(newSuggestionName)
+                                newSuggestionName = "" // Limpa o campo depois de adicionar
+                            }
+                        },
+                        modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape).size(48.dp)
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = "Adicionar", tint = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                }
+
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                // 2. LISTA DAS SUGESTÕES EXISTENTES
+                if (suggestions.isEmpty()) {
+                    Text(t("Sem sugestões guardadas.", "No saved suggestions.", isPt), color = TextGray)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp)) {
+                        items(suggestions, key = { it.id }) { sug ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(sug.name, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                                IconButton(onClick = { onDeleteSuggestion(sug.id) }) {
+                                    Icon(Icons.Rounded.Delete, contentDescription = "Apagar", tint = ErrorRed)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Fechar", "Close", isPt), fontWeight = FontWeight.Bold)
