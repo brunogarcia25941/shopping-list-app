@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0"
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -15,6 +15,16 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
+    }
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+            }
+        }
+        binaries.executable()
     }
     
     listOf(
@@ -32,7 +42,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
-            implementation("io.ktor:ktor-client-okhttp:2.3.7")
+            implementation("io.ktor:ktor-client-okhttp:3.0.0")
             implementation("com.google.android.gms:play-services-ads:23.0.0")
         }
         commonMain.dependencies {
@@ -45,18 +55,25 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             // Cliente HTTP e WebSockets
-            implementation("io.ktor:ktor-client-core:2.3.7")
-            implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+            implementation("io.ktor:ktor-client-core:3.0.0")
+            implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
 
             // Coroutines (para o tempo real)
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
             implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
 
             implementation("com.russhwolf:multiplatform-settings-no-arg:1.1.1")
 
             // Biblioteca para a Galeria/Câmara com compressão automática
-            implementation("io.github.onseok:peekaboo-image-picker:0.5.2")
+            implementation("io.github.vinceglb:filekit-core:0.8.7")
+            implementation("io.github.vinceglb:filekit-compose:0.8.7")
+
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+
+            implementation(kotlin("stdlib"))
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.0")
+
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

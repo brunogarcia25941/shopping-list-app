@@ -12,28 +12,8 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 
-@Serializable
-data class ShoppingItem(
-    val id: String = "",
-    val name: String,
-    val quantity: Int,
-    val isBought: Boolean = false,
-    val category: String = "Geral",
-    val familyCode: String = "",
-    val notes: String? = null,       // texto dos detalhes (ex: "Mimosa Magro")
-    val photoBase64: String? = null  // imagem comprimida em texto
-)
-
-@Serializable
-data class WsMessage(
-    val action: String,
-    val item: ShoppingItem? = null,
-    val itemId: String? = null
-)
 
 
 
@@ -115,6 +95,3 @@ class ShoppingClient(private val familyCode: String) {
     }
 }
 
-// O Modelo da Sugestão no Android
-@kotlinx.serialization.Serializable
-data class QuickSuggestion(val id: String = "", val familyCode: String = "", val name: String)

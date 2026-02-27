@@ -38,13 +38,9 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.CameraAlt
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
-import com.preat.peekaboo.image.picker.SelectionMode
-import com.preat.peekaboo.image.picker.toImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
-import com.preat.peekaboo.image.picker.ResizeOptions
 import kotlinx.serialization.json.Json
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.rounded.Settings
@@ -54,6 +50,10 @@ import kotlinx.serialization.encodeToString
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.ImageBitmap
+import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.core.PickerType
+import io.github.vinceglb.filekit.core.PickerMode
 
 
 // ============================================================================
@@ -1162,25 +1162,21 @@ fun ItemDetailsDialog(
         isLoadingPhoto = false // Desliga a rodinha
     }
 
-    val resizeOptions = ResizeOptions(
-        width = 800, // Máximo de 800 píxeis de largura
-        height = 800, // Máximo de 800 píxeis de altura
-        resizeThresholdBytes = 512 * 1024L, // Só comprime se a foto original tiver mais de 512 KB
-        compressionQuality = 0.5 // Perde um bocadinho de detalhe impercetível, mas poupa 50% do espaço
-    )
 
     // "apanhador" de imagens
-    val singleImagePicker = rememberImagePickerLauncher(
-        selectionMode = SelectionMode.Single,
-        scope = scope,
-        resizeOptions = resizeOptions,
-        onResult = { byteArrays ->
-            byteArrays.firstOrNull()?.let { byteArray ->
-                // O byteArray que chega aqui já vem leve e redimensionado
-                photoBase64 = Base64.Default.encode(byteArray)
+    val singleImagePicker = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        mode = PickerMode.Single,
+        title = "Escolher Fotografia"
+    ) { file ->
+        scope.launch {
+            file?.let {
+                // Lê os bytes do ficheiro (funciona no telemóvel e na Web!)
+                val bytes = it.readBytes()
+                photoBase64 = Base64.Default.encode(bytes)
             }
         }
-    )
+    }
 
     // Lemos os bytes fora da interface para evitar o erro do "Try-Catch" no Compose
     val imageBitmap = remember(photoBase64) {
@@ -1388,3 +1384,5 @@ fun SettingsDialog(
 
 
 expect @Composable fun AdBanner()
+
+expect fun ByteArray.toImageBitmap(): ImageBitmap
