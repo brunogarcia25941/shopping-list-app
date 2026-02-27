@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Remove
 
 
 // ============================================================================
@@ -1165,20 +1166,57 @@ fun AddItemDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+                // SELETOR DE QUANTIDADE (+ e -)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        t("Quantidade", "Quantity", isPt),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
 
-                OutlinedTextField(
-                    value = quantity,
-                    onValueChange = { quantity = it },
-                    label = { Text(t("Quantidade", "Quantity", isPt),) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Botão Menos (-)
+                        IconButton(
+                            onClick = {
+                                val current = quantity.toIntOrNull() ?: 1
+                                if (current > 1) quantity = (current - 1).toString()
+                            },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.background, CircleShape)
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Rounded.Remove, contentDescription = "Menos", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        // O Número no meio
+                        Text(
+                            text = quantity,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        // Botão Mais (+)
+                        IconButton(
+                            onClick = {
+                                val current = quantity.toIntOrNull() ?: 1
+                                quantity = (current + 1).toString()
+                            },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = "Mais", tint = MaterialTheme.colorScheme.surfaceVariant)
+                        }
+                    }
+                }
+
+
 
                 // Checkbox para guardar nos favoritos
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { saveAsSuggestion = !saveAsSuggestion }) {
@@ -1244,18 +1282,55 @@ fun EditItemDialog(
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
-                OutlinedTextField(
-                    value = quantity,
-                    onValueChange = { quantity = it },
-                    label = { Text(t("Quantidade", "Ammount", isPt)) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                // SELETOR DE QUANTIDADE (+ e -)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        t("Quantidade", "Quantity", isPt),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Botão Menos (-)
+                        IconButton(
+                            onClick = {
+                                val current = quantity.toIntOrNull() ?: 1
+                                if (current > 1) quantity = (current - 1).toString()
+                            },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.background, CircleShape)
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Rounded.Remove, contentDescription = "Menos", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        // O Número no meio
+                        Text(
+                            text = quantity,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        // Botão Mais (+)
+                        IconButton(
+                            onClick = {
+                                val current = quantity.toIntOrNull() ?: 1
+                                quantity = (current + 1).toString()
+                            },
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = "Mais", tint = MaterialTheme.colorScheme.surfaceVariant)
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
