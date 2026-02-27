@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 class Greeting {
     private val platform = getPlatform()

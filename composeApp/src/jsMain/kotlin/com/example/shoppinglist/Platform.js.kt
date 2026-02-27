@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 class JsPlatform: Platform {
     override val name: String = "Web with Kotlin/JS"

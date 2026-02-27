@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap

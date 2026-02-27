@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

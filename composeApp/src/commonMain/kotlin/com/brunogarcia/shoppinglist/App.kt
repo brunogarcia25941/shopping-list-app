@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -44,7 +44,7 @@ import kotlinx.serialization.json.Json
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Language
-import com.example.shoppinglist.t
+import com.brunogarcia.shoppinglist.t
 import kotlinx.serialization.encodeToString
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab

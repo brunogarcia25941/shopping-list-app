@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 import platform.UIKit.UIDevice
 import androidx.compose.runtime.Composable

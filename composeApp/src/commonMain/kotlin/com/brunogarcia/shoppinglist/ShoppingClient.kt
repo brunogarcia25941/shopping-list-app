@@ -1,4 +1,4 @@
-package com.example.shoppinglist
+package com.brunogarcia.shoppinglist
 
 import io.ktor.client.*
 import io.ktor.client.call.body

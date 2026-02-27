@@ -44,6 +44,7 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation("io.ktor:ktor-client-okhttp:3.0.0")
             implementation("com.google.android.gms:play-services-ads:23.0.0")
+            implementation("com.google.android.ump:user-messaging-platform:2.2.0")
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -82,11 +83,11 @@ kotlin {
 }
 
 android {
-    namespace = "com.example.shoppinglist"
+    namespace = "com.brunogarcia.shoppinglist"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.example.shoppinglist"
+        applicationId = "com.brunogarcia.shoppinglist"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
