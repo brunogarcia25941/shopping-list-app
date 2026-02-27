@@ -54,6 +54,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PickerMode
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 
 
 // ============================================================================
@@ -393,6 +395,32 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             }
         }
     }
+
+    // ------------------------------------------------------------------------
+    // FASE 4: O "DESPERTADOR" (Voltar do Segundo Plano)
+    // Este bloco corre sempre que a app volta a estar visível no ecrã!
+    // ------------------------------------------------------------------------
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        scope.launch {
+            try {
+                // A app acordou, vamos ver o que perdemos enquanto dormía
+                val netItems = client.getItems()
+                val netSugs = client.getSuggestions()
+
+                // Atualizamos a interface silenciosamente
+                items.clear()
+                items.addAll(netItems)
+
+                suggestions.clear()
+                suggestions.addAll(netSugs)
+
+                // Tiramos uma nova "fotografia" para o Modo Offline
+                saveToCache()
+            } catch (e: Exception) {
+                println("Erro ao recarregar após despertar: ${e.message}")
+            }
+        }
+    }
     // ------------------------------------------------------------------------
     // CONSTRUÇÃO DA INTERFACE (UI)
     // ------------------------------------------------------------------------
@@ -591,18 +619,26 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
                         if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
                             scope.launch {
-                                var jaDesfez = false // Variável de controlo para evitar duplo-clique no Desfazer
+                                var jaDesfez = false
                                 try {
-                                    // 1. Limpa pop-ups antigos e manda apagar no servidor
+                                    // 1. Limpa pop-ups antigos
                                     snackbarHostState.currentSnackbarData?.dismiss()
+
+                                    // 2. APAGA LOCALMENTE PRIMEIRO (Para o cartão vermelho desaparecer instantaneamente!)
+                                    items.remove(item)
+                                    saveToCache()
+
+                                    // 3. Manda apagar no servidor as escondidas
                                     client.deleteItem(item.id)
-                                    // 2. Mostra a mensagem e fica à espera de uma ação (Suspende aqui até a mensagem fechar)
+
+                                    // 4. Mostra a mensagem e fica à espera de uma ação (Suspende aqui)
                                     val result = snackbarHostState.showSnackbar(
                                         message = "${item.name} apagado",
                                         actionLabel = "Desfazer",
                                         duration = SnackbarDuration.Short
                                     )
-                                    // 3. Se o utilizador clicou no botão "Desfazer" e ainda não tinha clicado
+
+                                    // 5. Se o utilizador clicou no botão "Desfazer"
                                     if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
                                         jaDesfez = true
                                         snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
@@ -611,7 +647,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                         val uniqueId = kotlin.random.Random.nextLong().toString()
                                         val itemRestaurado = item.copy(id = uniqueId)
 
-                                        items.add(itemRestaurado) // Aparece logo!
+                                        items.add(itemRestaurado) // Volta a aparecer na lista!
                                         saveToCache()
 
                                         // Mandamos para o servidor a nova versão
@@ -619,6 +655,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                     }
                                 } catch (e: Exception) {
                                     println("Erro: ${e.message}")
+                                    // Se der erro (ex: sem internet), devolvemos o item à lista para não o perder
+                                    if (!items.contains(item)) {
+                                        items.add(item)
+                                    }
                                 }
                             }
                             true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
