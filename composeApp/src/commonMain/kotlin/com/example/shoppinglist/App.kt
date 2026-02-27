@@ -56,6 +56,8 @@ import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PickerMode
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 
 // ============================================================================
@@ -333,6 +335,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
     // O 'scope' serve para podermos lançar rotinas assíncronas (como ir à internet) sem bloquear a interface da app.
     val scope = rememberCoroutineScope()
+
+    // motor de vibração (Haptics)
+    val vibrator = rememberNativeVibrator()
 
     // Controlador daquela barra preta que aparece no fundo (Snackbar) com o botão "Desfazer"
     val snackbarHostState = remember { SnackbarHostState() }
@@ -675,6 +680,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     confirmValueChange = { dismissValue ->
                         // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
                         if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+
+                            // Vibra ligeiramente ao apagar
+                            vibrator.vibrateHeavy()
+
                             scope.launch {
                                 var jaDesfez = false
                                 try {
@@ -799,6 +808,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                         .size(40.dp)
                                         .clip(CircleShape)
                                         .clickable {
+
+                                            // vibra ao fazer check
+                                            vibrator.vibrateHeavy()
+
                                             // 1. Criamos a versão atualizada do item com o visto trocado
                                             val newState = !item.isBought
                                             val updatedItem = item.copy(isBought = newState)
@@ -1268,9 +1281,14 @@ fun ItemDetailsDialog(
     ) { file ->
         scope.launch {
             file?.let {
-                // Lê os bytes do ficheiro (funciona no telemóvel e na Web!)
-                val bytes = it.readBytes()
-                photoBase64 = Base64.Default.encode(bytes)
+                // 1. Lê os bytes originais do telemóvel (pesados)
+                val rawBytes = it.readBytes()
+
+                // 2. Passamos pelo compressor
+                val compressedBytes = rawBytes.compressImage()
+
+                // 3. Transformamos a imagem miniatura em texto para o servidor
+                photoBase64 = Base64.Default.encode(compressedBytes)
             }
         }
     }
@@ -1494,3 +1512,14 @@ expect @Composable fun AdBanner()
 
 expect fun ByteArray.toImageBitmap(): ImageBitmap
 
+expect fun ByteArray.compressImage(): ByteArray
+
+
+// 1. "Comando" que as plataformas têm de obedecer
+interface NativeVibrator {
+    fun vibrateHeavy()
+}
+
+// 2. Prometemos que sabemos criar este comando em qualquer sistema
+@Composable
+expect fun rememberNativeVibrator(): NativeVibrator
