@@ -38,7 +38,6 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.CameraAlt
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import kotlinx.serialization.json.Json
@@ -51,6 +50,7 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerType
 import io.github.vinceglb.filekit.core.PickerMode
@@ -114,6 +114,10 @@ fun App() {
         if (loggedFamilyCode.isEmpty()) {
             LoginScreen(
                 isPt = isPortuguese,
+                onLanguageChange = { newState ->
+                    isPortuguese = newState
+                    settings.putBoolean("IS_PT", newState) // Guarda o idioma
+                },
                 onEnter = { code ->
                     loggedFamilyCode = code
                     settings.putString("FAMILY_CODE", code)
@@ -150,57 +154,108 @@ fun App() {
 }
 
 @Composable
-fun LoginScreen(isPt: Boolean, onEnter: (String) -> Unit) {
+fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (String) -> Unit) {
     var codeInput by remember { mutableStateOf("") }
 
-    // Ecrã centrado
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        // --- 1. BOTÃO DE MUDAR IDIOMA NO CANTO SUPERIOR ---
+        Row(
+            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(16.dp),
+            horizontalArrangement = Arrangement.End
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            TextButton(
+                onClick = { onLanguageChange(!isPt) },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text(
-                    t("Bem-vindo", "Welcome", isPt),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    t("Insere o código da tua família para entrares na lista partilhada.", "Enter the code of your family to enter the shared list.", isPt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextGray
-                )
+                Icon(Icons.Rounded.Language, contentDescription = "Language")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (isPt) "PT" else "EN", fontWeight = FontWeight.Bold)
+            }
+        }
 
-                OutlinedTextField(
-                    value = codeInput,
-                    onValueChange = { codeInput = it.uppercase() }, // Força a ficar tudo em maiúsculas
-                    label = { Text(t("Código da Casa", "Family Code", isPt),) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    singleLine = true
-                )
-
-                Button(
-                    onClick = {
-                        if (codeInput.isNotBlank()) onEnter(codeInput)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surfaceVariant)
+        // --- 2. O CARTÃO PRINCIPAL (Centrado) ---
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(t("Entrar", "Login", isPt), fontWeight = FontWeight.Bold)
+                    Text(
+                        t("Bem-vindo", "Welcome", isPt),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    // --- 3. CAIXA DE INSTRUÇÕES ELEGANTE ---
+                    Surface(
+                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f), // Fundo translúcido
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Info,
+                                contentDescription = "Info",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                t(
+                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!",
+                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!",
+                                    isPt
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextGray
+                            )
+                        }
+                    }
+
+                    // --- 4. O CAMPO DE TEXTO ---
+                    OutlinedTextField(
+                        value = codeInput,
+                        // Tira espaços e põe tudo em maiúsculas automaticamente
+                        onValueChange = { codeInput = it.uppercase().replace(" ", "") },
+                        label = { Text(t("Código da Casa", "Family Code", isPt)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // --- 5. O BOTÃO DE ENTRAR ---
+                    Button(
+                        onClick = {
+                            if (codeInput.isNotBlank()) onEnter(codeInput)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(t("Entrar", "Login", isPt), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -502,7 +557,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                             onClick = { selectedCategory = categoria },
                             text = {
                                 Text(
-                                    text = categoria,
+                                    text = tCategory(categoria, isPortuguese),
                                     fontWeight = if (selectedCategory == categoria) FontWeight.Bold else FontWeight.Normal,
                                     color = if (selectedCategory == categoria) MaterialTheme.colorScheme.primary else TextGray
                                 )
@@ -564,8 +619,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        val catTranslated = tCategory(selectedCategory, isPortuguese)
+
                         Text(
-                            t("A lista de $selectedCategory está vazia", "The $selectedCategory list is empty", isPortuguese),
+                            t("A lista de $catTranslated está vazia", "The $catTranslated list is empty", isPortuguese),
                             style = MaterialTheme.typography.titleMedium,
                             color = TextGray
                         )
@@ -625,7 +682,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                     snackbarHostState.currentSnackbarData?.dismiss()
 
                                     // 2. APAGA LOCALMENTE PRIMEIRO (Para o cartão vermelho desaparecer instantaneamente!)
-                                    items.remove(item)
+                                    items.removeAll { it.id == item.id }
                                     saveToCache()
 
                                     // 3. Manda apagar no servidor as escondidas
@@ -656,7 +713,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                 } catch (e: Exception) {
                                     println("Erro: ${e.message}")
                                     // Se der erro (ex: sem internet), devolvemos o item à lista para não o perder
-                                    if (!items.contains(item)) {
+                                    if (items.none { it.id == item.id }) {
                                         items.add(item)
                                     }
                                 }
@@ -1315,6 +1372,16 @@ fun t(pt: String, en: String, isPt: Boolean): String {
     return if (isPt) pt else en
 }
 
+// Tradutor específico de categorias
+fun tCategory(categoria: String, isPt: Boolean): String {
+    return when (categoria) {
+        "Supermercado" -> if (isPt) "Supermercado" else "Supermarket"
+        "Farmácia" -> if (isPt) "Farmácia" else "Pharmacy"
+        "Outros" -> if (isPt) "Outros" else "Others"
+        else -> categoria // Previne erros se houver outras categorias antigas
+    }
+}
+
 @Composable
 fun SettingsDialog(
     isDarkTheme: Boolean,
@@ -1426,3 +1493,4 @@ fun SettingsDialog(
 expect @Composable fun AdBanner()
 
 expect fun ByteArray.toImageBitmap(): ImageBitmap
+
