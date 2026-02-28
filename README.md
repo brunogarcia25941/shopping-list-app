@@ -1,63 +1,77 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web.
+# 🛒 Family Shopping List (Cross-Platform)
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+A modern, real-time, cross-platform shopping list application built entirely with **Kotlin Multiplatform (KMP)** and **Compose Multiplatform**.
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+This app allows families to share a single, synchronized shopping list without the friction of creating accounts, managing passwords, or sharing emails. You simply invent a "Family Code" (e.g., `SMITH2026`) and share it. Anyone using that code will see and update the exact same list in real-time.
 
-### Build and Run Android Application
-
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
-
-### Build and Run Web Application
-
-To build and run the development version of the web app, use the run configuration from the run widget
-in your IDE's toolbar or run it directly from the terminal:
-- for the Wasm target (faster, modern browsers):
-  - on macOS/Linux
-    ```shell
-    ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
-    ```
-  - on Windows
-    ```shell
-    .\gradlew.bat :composeApp:wasmJsBrowserDevelopmentRun
-    ```
-- for the JS target (slower, supports older browsers):
-  - on macOS/Linux
-    ```shell
-    ./gradlew :composeApp:jsBrowserDevelopmentRun
-    ```
-  - on Windows
-    ```shell
-    .\gradlew.bat :composeApp:jsBrowserDevelopmentRun
-    ```
-
-### Build and Run iOS Application
-
-To build and run the development version of the iOS app, use the run configuration from the run widget
-in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+🌐 **Try the Web Version here:** ! https://family-shopping-list-maoz.onrender.com
+📱 **Download on Google Play:** [Insert Play Store Link Here] *(Coming Soon)*
 
 ---
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
+## 📄 License & Privacy
+* **Privacy Policy:** https://sites.google.com/view/family-shoppinglist
+* **Author:** Bruno Garcia
 
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+---
+
+## ✨ Key Features
+
+* ⚡ **Real-Time Synchronization:** Powered by WebSockets. Add, check, or delete items on your phone, and watch them update instantly on your family's devices.
+* 👨‍👩‍👧‍👦 **Frictionless Onboarding:** No accounts required. Just a shared "Family Code".
+* 🌐 **Kotlin/Wasm Web Support:** iPhone and PC users don't even need to install an app. They can access the fully functional Compose UI directly from their browser, powered by WebAssembly.
+* 🚀 **Optimistic UI Updates:** The app updates the local UI instantly before the server even responds. If the network fails, it smoothly reverts the changes.
+* 👆 **Modern Gestures:**
+  * **Swipe-to-Delete:** With animated trash icons and a "Undo" Snackbar.
+  * **Pull-to-Refresh:** Utilizing Material 3's new `PullToRefreshBox`.
+* 📳 **Haptic Feedback:** Custom native vibrator interfaces implemented for Android and iOS for a premium feel.
+* 🌍 **Bilingual Support:** Automatically adapts to English and Portuguese based on the device's language.
+* 🛡️ **GDPR Compliant:** Fully integrated with Google AdMob and User Messaging Platform (UMP) for European privacy laws.
+
+---
+
+## 🛠️ Tech Stack & Architecture
+
+This project strictly follows a **single-codebase** philosophy, maximizing code sharing across Android, iOS, and Web.
+
+* **Language:** Kotlin
+* **Frameworks:** Kotlin Multiplatform (KMP)
+* **UI Toolkit:** Compose Multiplatform (Material 3)
+* **Network & Real-Time:** Ktor Client (HTTP requests & WebSockets)
+* **Serialization:** `kotlinx.serialization` (JSON parsing)
+* **Web Target:** Kotlin/Wasm (WebAssembly)
+* **Coroutines:** `kotlinx.coroutines` for asynchronous flow and state management.
+* **Backend / Hosting:** Render (Static Site for Wasm, Web Service for Ktor backend).
+
+---
+
+## 🧠 Technical Highlights
+
+### Smart Reconnection Protocol
+To handle unstable mobile networks, the WebSocket client is wrapped in a resilient coroutine loop. It features a `20-second ping interval` to prevent server timeouts and a `3-second auto-reconnect delay` if the connection drops.
+
+### Platform-Specific Implementations (`expect`/`actual`)
+While 95% of the code is shared, native capabilities are seamlessly injected using Kotlin's `expect`/`actual` mechanism:
+* **Image Compression:** Native Skia for Web, Android Bitmap for Mobile.
+* **Haptic Engine:** `Vibrator` service on Android, `UIImpactFeedbackGenerator` on iOS.
+* **Clipboard & Share:** Native OS sharing menus for mobile, Javascript interop (`js()`) for Web.
+
+---
+
+## 🚀 How to Run Locally
+
+### Prerequisites
+* Android Studio (latest version) or IntelliJ IDEA.
+* Java JDK 17+.
+
+### Android
+1. Open the project in Android Studio.
+2. Select the `composeApp` run configuration.
+3. Choose an emulator or physical device.
+4. Hit Run (Shift + F10).
+
+### Web (Wasm)
+To run the web application locally in your browser:
+```bash
+./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+
