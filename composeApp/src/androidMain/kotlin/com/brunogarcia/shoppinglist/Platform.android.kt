@@ -1,5 +1,6 @@
 package com.brunogarcia.shoppinglist
 
+import android.annotation.SuppressLint
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,6 +22,13 @@ import android.os.VibratorManager
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
+import android.app.Activity
+import android.view.WindowManager
+import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
 }
@@ -119,3 +127,44 @@ actual fun rememberShareManager(): ShareManager {
     val context = LocalContext.current
     return remember { AndroidShareManager(context) }
 }
+
+class AndroidScreenManager(private val activity: Activity?) : ScreenManager {
+    override fun keepScreenOn(keepOn: Boolean) {
+        if (keepOn) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+}
+
+@SuppressLint("ContextCastToActivity")
+@Composable
+actual fun rememberScreenManager(): ScreenManager {
+    // O Android Studio pode reclamar do cast as? Activity, mas podes ignorar ou aceitar o @Suppress("UNCHECKED_CAST")
+    val activity = LocalContext.current as? Activity
+    return remember { AndroidScreenManager(activity) }
+}
+
+
+class AndroidWidgetUpdater(private val context: Context) : WidgetUpdater {
+    override fun update() {
+        val appContext = context.applicationContext
+        // O Android obriga que a atualização do Widget seja feita de forma "invisível" (background)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ShoppingWidget().updateAll(appContext)
+            } catch (e: Exception) {
+                println("Erro ao atualizar widget: ${e.message}")
+            }
+        }
+    }
+}
+
+@Composable
+actual fun rememberWidgetUpdater(): WidgetUpdater {
+    val context = LocalContext.current
+    return remember { AndroidWidgetUpdater(context) }
+}
+
+actual val isWidgetSupported: Boolean = true

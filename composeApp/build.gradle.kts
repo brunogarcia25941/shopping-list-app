@@ -45,6 +45,9 @@ kotlin {
             implementation("io.ktor:ktor-client-okhttp:3.0.0")
             implementation("com.google.android.gms:play-services-ads:23.0.0")
             implementation("com.google.android.ump:user-messaging-platform:2.2.0")
+            // Ferramentas para criar Widgets no ecrã principal (Jetpack Glance)
+            implementation("androidx.glance:glance-appwidget:1.1.0")
+            implementation("androidx.glance:glance-material3:1.1.0")
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)

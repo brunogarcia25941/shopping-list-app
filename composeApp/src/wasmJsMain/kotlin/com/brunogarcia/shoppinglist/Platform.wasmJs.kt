@@ -71,3 +71,28 @@ class WebShareManager : ShareManager {
 actual fun rememberShareManager(): ShareManager {
     return remember { WebShareManager() }
 }
+
+class WebScreenManager : ScreenManager {
+    override fun keepScreenOn(keepOn: Boolean) {
+        // A Web não suporta (ou não precisa) de impedir o ecrã de apagar desta forma
+    }
+}
+
+@Composable
+actual fun rememberScreenManager(): ScreenManager {
+    return remember { WebScreenManager() }
+}
+
+
+class WebWidgetUpdater : WidgetUpdater {
+    override fun update() {
+        // A Web não tem Widgets de ecrã principal, logo ignoramos
+    }
+}
+
+@Composable
+actual fun rememberWidgetUpdater(): WidgetUpdater {
+    return remember { WebWidgetUpdater() }
+}
+
+actual val isWidgetSupported: Boolean = false

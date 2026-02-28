@@ -61,6 +61,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 
@@ -361,6 +362,21 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
+    val screenManager = rememberScreenManager()
+
+    // Assim que este ecrã aparecer (LaunchedEffect), ele diz "fica ligado"
+    LaunchedEffect(Unit) {
+        screenManager.keepScreenOn(true)
+    }
+
+    //Quando a pessoa sair deste ecra o compose corre a seccao "onDispose" e diz que o ecrã ja pode apagar
+    DisposableEffect(Unit) {
+        onDispose {
+            screenManager.keepScreenOn(false)
+        }
+    }
+
+    val widgetUpdater = rememberWidgetUpdater()
 
     val saveToCache = {
         try {
@@ -369,6 +385,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             val sugJson = Json.encodeToString(suggestions.toList())
             settings.putString("CACHE_ITEMS_$familyCode", itemsJson)
             settings.putString("CACHE_SUGS_$familyCode", sugJson)
+            widgetUpdater.update()
         } catch (e: Exception) { println("Erro ao guardar cache: ${e.message}") }
     }
 
@@ -1750,6 +1767,39 @@ fun SettingsDialog(
                         )
                     }
                 }
+
+                // ANÚNCIO DO WIDGET (Só aparece em Android)
+                if (isWidgetSupported) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Widgets, // Adiciona o import se necessário
+                                contentDescription = "Widget",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = t(
+                                    "Dica: Vai ao teu ecrã principal e adiciona o nosso Widget para veres a lista sem abrir a app!",
+                                    "Tip: Add our Widget to your home screen to see the list without opening the app!",
+                                    isPt
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+
             }
         },
         confirmButton = {
@@ -1901,3 +1951,4 @@ interface ShareManager {
 }
 @Composable
 expect fun rememberShareManager(): ShareManager
+

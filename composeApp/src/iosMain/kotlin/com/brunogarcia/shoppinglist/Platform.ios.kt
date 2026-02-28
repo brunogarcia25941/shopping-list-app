@@ -69,3 +69,27 @@ class IosShareManager : ShareManager {
 actual fun rememberShareManager(): ShareManager {
     return remember { IosShareManager() }
 }
+
+class IosScreenManager : ScreenManager {
+    override fun keepScreenOn(keepOn: Boolean) {
+        UIApplication.sharedApplication.idleTimerDisabled = keepOn
+    }
+}
+
+@Composable
+actual fun rememberScreenManager(): ScreenManager {
+    return remember { IosScreenManager() }
+}
+
+class IosWidgetUpdater : WidgetUpdater {
+    override fun update() {
+        // No iOS usa-se o WidgetKit (fica para uma próxima atualização)
+    }
+}
+
+@Composable
+actual fun rememberWidgetUpdater(): WidgetUpdater {
+    return remember { IosWidgetUpdater() }
+}
+
+actual val isWidgetSupported: Boolean = false
