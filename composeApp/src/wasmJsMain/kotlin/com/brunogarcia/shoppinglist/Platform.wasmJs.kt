@@ -51,14 +51,19 @@ actual fun rememberNativeVibrator(): NativeVibrator {
 }
 
 
+// 1. O código JS tem de estar numa função isolada (top-level) com o sinal de "="
+private fun copyToClipboardJs(text: String): Unit = js("""
+    {
+        navigator.clipboard.writeText(text).then(function() {
+            window.alert('Lista copiada com sucesso! / List copied to clipboard!');
+        });
+    }
+""")
+
+// 2. a classe apenas chama essa função!
 class WebShareManager : ShareManager {
     override fun shareText(text: String) {
-        // Usa JavaScript nativo para copiar para o Clipboard e dar um aviso
-        js("""
-            navigator.clipboard.writeText(text).then(function() {
-                alert('Lista copiada com sucesso! / List copied to clipboard!');
-            });
-        """)
+        copyToClipboardJs(text)
     }
 }
 
