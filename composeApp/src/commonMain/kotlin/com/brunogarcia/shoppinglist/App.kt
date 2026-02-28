@@ -224,8 +224,8 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 t(
-                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.\n[O-TEU-LINK-AQUI.com]",
-                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.",
+                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.\nhttps://family-shopping-list-maoz.onrender.com/",
+                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.\nhttps://family-shopping-list-maoz.onrender.com/",
                                     isPt
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -424,51 +424,59 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             isLoading = false
         }
 
-        // -------------------------------------------------------------
-        // FASE 3: WEBSOCKET A LÓGICA INTELIGENTE
-        // -------------------------------------------------------------
-        client.listenForUpdates().collect { jsonText ->
-            try {
-                val message = Json.decodeFromString<WsMessage>(jsonText)
-                var houveAlteracao = false
 
-                when (message.action) {
-                    "ADD" -> {
-                        message.item?.let { newItem ->
-                            // Vemos se o ID do item da lista (it) é igual ao do novo (newItem)
-                            if (items.none { it.id == newItem.id }) {
-                                items.add(newItem)
-                                houveAlteracao = true
+        // -------------------------------------------------------------
+        // FASE 3: WEBSOCKET A LÓGICA INTELIGENTE (COM RECONEXÃO)
+        // -------------------------------------------------------------
+        while (true) {
+            try {
+                client.listenForUpdates().collect { jsonText ->
+                    try {
+                        val message = Json.decodeFromString<WsMessage>(jsonText)
+                        var houveAlteracao = false
+
+                        when (message.action) {
+                            "ADD" -> {
+                                message.item?.let { newItem ->
+                                    if (items.none { it.id == newItem.id }) {
+                                        items.add(newItem)
+                                        houveAlteracao = true
+                                    }
+                                }
+                            }
+                            "UPDATE" -> {
+                                message.item?.let { updatedItem ->
+                                    val index = items.indexOfFirst { it.id == updatedItem.id }
+                                    if (index != -1) {
+                                        items[index] = updatedItem
+                                        houveAlteracao = true
+                                    }
+                                }
+                            }
+                            "DELETE" -> {
+                                message.itemId?.let { idToApagar ->
+                                    val apagou = items.removeAll { it.id == idToApagar }
+                                    if (apagou) houveAlteracao = true
+                                }
+                            }
+                            "DELETE_BOUGHT" -> {
+                                val apagou = items.removeAll { it.isBought }
+                                if (apagou) houveAlteracao = true
                             }
                         }
-                    }
-                    "UPDATE" -> {
-                        message.item?.let { updatedItem ->
-                            val index = items.indexOfFirst { it.id == updatedItem.id }
-                            if (index != -1) {
-                                items[index] = updatedItem
-                                houveAlteracao = true
-                            }
-                        }
-                    }
-                    "DELETE" -> {
-                        message.itemId?.let { idToApagar ->
-                            val apagou = items.removeAll { it.id == idToApagar }
-                            if (apagou) houveAlteracao = true
-                        }
-                    }
-                    "DELETE_BOUGHT" -> {
-                        val apagou = items.removeAll { it.isBought }
-                        if (apagou) houveAlteracao = true
+
+                        if (houveAlteracao) saveToCache()
+
+                    } catch (e: Exception) {
+                        println("Erro ao decifrar evento: ${e.message}")
                     }
                 }
-
-                // Se o servidor mandou algo e alterámos a lista, atualizamos a cache!
-                if (houveAlteracao) saveToCache()
-
             } catch (e: Exception) {
-                println("Erro ao decifrar evento: ${e.message}")
+                println("A ligação WebSocket caiu. A tentar religar... Erro: ${e.message}")
             }
+
+            // Se o collect for interrompido (falha de rede), esperamos 3 segundos e o while(true) tenta de novo
+            kotlinx.coroutines.delay(3000)
         }
     }
 
@@ -1658,8 +1666,8 @@ fun SettingsDialog(
                     ) {
                         Text(
                             t(
-                                "Tens familiares com iPhone ou PC?\nPartilha este link para eles acederem à lista sem precisarem da app:\n[O-TEU-LINK-AQUI.com]",
-                                "Have family members with an iPhone or PC?\nShare this link so they can access the list without the app:\n[YOUR-LINK-HERE.com]",
+                                "Tens familiares com iPhone ou PC?\nPartilha este link para eles acederem à lista sem precisarem da app:\nhttps://family-shopping-list-maoz.onrender.com/",
+                                "Have family members with an iPhone or PC?\nShare this link so they can access the list without the app:\nhttps://family-shopping-list-maoz.onrender.com/",
                                 isPt
                             ),
                             style = MaterialTheme.typography.bodySmall,

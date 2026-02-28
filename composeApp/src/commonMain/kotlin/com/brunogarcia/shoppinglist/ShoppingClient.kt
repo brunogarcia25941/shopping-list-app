@@ -12,7 +12,7 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-
+import kotlin.time.Duration.Companion.seconds
 
 
 
@@ -28,7 +28,9 @@ class ShoppingClient(private val familyCode: String) {
         install(ContentNegotiation) {
             json()
         }
-        install(WebSockets)
+        install(WebSockets){
+            pingInterval = 20.seconds // Manda um "Estou vivo" a cada 20 segundos
+        }
     }
 
     suspend fun getItems(): List<ShoppingItem> {
