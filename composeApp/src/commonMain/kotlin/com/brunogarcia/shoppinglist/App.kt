@@ -224,8 +224,8 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 t(
-                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!",
-                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!",
+                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.\n[O-TEU-LINK-AQUI.com]",
+                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.",
                                     isPt
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -1643,6 +1643,30 @@ fun SettingsDialog(
                     Icon(Icons.Rounded.Star, contentDescription = null, tint = TextGray)
                     Spacer(Modifier.width(12.dp))
                     Text(t("Gerir Sugestões Rápidas", "Manage Quick Suggestions", isPt), modifier = Modifier.weight(1f))
+                }
+                Divider(color = TextGray.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 8.dp))
+
+                // INSTRUÇÕES PARA IPHONE / WEB
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), // Fundo suave a combinar com o tema
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            t(
+                                "Tens familiares com iPhone ou PC?\nPartilha este link para eles acederem à lista sem precisarem da app:\n[O-TEU-LINK-AQUI.com]",
+                                "Have family members with an iPhone or PC?\nShare this link so they can access the list without the app:\n[YOUR-LINK-HERE.com]",
+                                isPt
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         },
