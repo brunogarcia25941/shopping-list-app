@@ -64,6 +64,8 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextDecoration
 
 // ============================================================================
 // 1. A NOSSA NOVA PALETA DE CORES (Premium Dark Blue)
@@ -165,6 +167,8 @@ fun App() {
 @Composable
 fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (String) -> Unit) {
     var codeInput by remember { mutableStateOf("") }
+    // Traz o gestor de links do Android/iOS/Web
+    val uriHandler = LocalUriHandler.current
 
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -208,6 +212,7 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                     )
 
                     // --- 3. CAIXA DE INSTRUÇÕES ELEGANTE ---
+
                     Surface(
                         color = MaterialTheme.colorScheme.background.copy(alpha = 0.5f), // Fundo translúcido
                         shape = RoundedCornerShape(12.dp),
@@ -224,17 +229,33 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                                 modifier = Modifier.size(28.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                t(
-                                    "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.\nhttps://family-shopping-list-maoz.onrender.com/",
-                                    "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.\nhttps://family-shopping-list-maoz.onrender.com/",
-                                    isPt
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextGray
-                            )
+
+                            // Envolvemos os textos numa Coluna com "weight"
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    t(
+                                        "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.",
+                                        "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.",
+                                        isPt
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextGray
+                                )
+                                Text(
+                                    text = "https://family-shopping-list-maoz.onrender.com/",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textDecoration = TextDecoration.Underline,
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .clickable {
+                                            uriHandler.openUri("https://family-shopping-list-maoz.onrender.com/")
+                                        }
+                                )
+                            }
                         }
                     }
+
 
                     // --- 4. O CAMPO DE TEXTO ---
                     OutlinedTextField(
@@ -1653,6 +1674,8 @@ fun SettingsDialog(
     onOpenManageSuggestions: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Traz o gestor de links do Android/iOS/Web
+    val uriHandler = LocalUriHandler.current
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -1751,19 +1774,29 @@ fun SettingsDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    // Trocamos o Row por Column aqui para os dois textos ficarem empilhados!
+                    Column(
                         modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             t(
-                                "Tens familiares com iPhone ou PC?\nPartilha este link para eles acederem à lista sem precisarem da app:\nhttps://family-shopping-list-maoz.onrender.com/",
-                                "Have family members with an iPhone or PC?\nShare this link so they can access the list without the app:\nhttps://family-shopping-list-maoz.onrender.com/",
+                                "Tens familiares com iPhone ou PC?\nPartilha este link para eles acederem à lista sem precisarem da app:",
+                                "Have family members with an iPhone or PC?\nShare this link so they can access the list without the app:",
                                 isPt
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "https://family-shopping-list-maoz.onrender.com/",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall,
+                            textDecoration = TextDecoration.Underline,
+                            modifier = Modifier.clickable {
+                                uriHandler.openUri("https://family-shopping-list-maoz.onrender.com/")
+                            }
                         )
                     }
                 }
