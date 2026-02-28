@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -66,6 +67,12 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 
 // ============================================================================
 // 1. A NOSSA NOVA PALETA DE CORES (Premium Dark Blue)
@@ -767,7 +774,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                 LazyColumn(
                     modifier = Modifier.padding().fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
 
                     // A dica visual no topo da lista
@@ -794,246 +801,277 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     items(
                         items.filter { it.category == selectedCategory }.sortedBy { it.isBought },
                         key = { it.id }) { item ->
-                        // ----------------------------------------------------------------
-                        // LÓGICA DO SWIPE (Deslizar para apagar)
-                        // ----------------------------------------------------------------
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { dismissValue ->
-                                // Só ativa se o movimento for da Direita para a Esquerda (EndToStart)
-                                if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
 
-                                    // Vibra ligeiramente ao apagar
-                                    vibrator.vibrateHeavy()
+                        // ANIMAÇÃO DE VISIBILIDADE ---
+                        var isVisible by remember { mutableStateOf(false) }
 
-                                    scope.launch {
-                                        var jaDesfez = false
-                                        try {
-                                            // 1. Limpa pop-ups antigos
-                                            snackbarHostState.currentSnackbarData?.dismiss()
+                        // Assim que o cartão entra no ecrã pela primeira vez, ele aparece suavemente
+                        LaunchedEffect(Unit) {
+                            isVisible = true
+                        }
 
-                                            // 2. APAGA LOCALMENTE PRIMEIRO (Para o cartão vermelho desaparecer instantaneamente!)
-                                            items.removeAll { it.id == item.id }
-                                            saveToCache()
+                        // Envolvemos o cartão nesta "Caixa" que sabe encolher e esticar
+                        AnimatedVisibility(
+                            visible = isVisible,
+                            enter = fadeIn(tween(500)) + expandVertically(tween(500)),
+                            exit = fadeOut(tween(500)) + shrinkVertically(tween(500))
+                        ) {
+                            // ----------------------------------------------------------------
+                            // LÓGICA DO SWIPE (Deslizar para apagar)
+                            // ----------------------------------------------------------------
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { dismissValue ->
+                                    if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
 
-                                            // 3. Manda apagar no servidor as escondidas
-                                            client.deleteItem(item.id)
+                                        vibrator.vibrateHeavy()
 
-                                            // 4. Mostra a mensagem e fica à espera de uma ação (Suspende aqui)
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "${item.name} apagado",
-                                                actionLabel = "Desfazer",
-                                                duration = SnackbarDuration.Short
-                                            )
+                                        scope.launch {
+                                            var jaDesfez = false
+                                            try {
+                                                snackbarHostState.currentSnackbarData?.dismiss()
 
-                                            // 5. Se o utilizador clicou no botão "Desfazer"
-                                            if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
-                                                jaDesfez = true
-                                                snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
+                                                // 1. MAGIA VISUAL: Em vez de apagar logo, fechamos a "cortina"!
+                                                isVisible = false
 
-                                                // Restaura com um novo ID único (e otimista!)
-                                                val uniqueId =
-                                                    kotlin.random.Random.nextLong().toString()
-                                                val itemRestaurado = item.copy(id = uniqueId)
+                                                // 2. Esperamos que o cartão termine de encolher (300ms)
+                                                kotlinx.coroutines.delay(500)
 
-                                                items.add(itemRestaurado) // Volta a aparecer na lista!
+                                                // 3. AGORA SIM, apagamos da base de dados local
+                                                items.removeAll { it.id == item.id }
                                                 saveToCache()
 
-                                                // Mandamos para o servidor a nova versão
-                                                client.addItem(itemRestaurado)
-                                            }
-                                        } catch (e: Exception) {
-                                            println("Erro: ${e.message}")
-                                            // Se der erro (ex: sem internet), devolvemos o item à lista para não o perder
-                                            if (items.none { it.id == item.id }) {
-                                                items.add(item)
-                                            }
-                                        }
-                                    }
-                                    true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
-                                } else {
-                                    false // Se deslizar para o lado errado, volta a colocar o cartão no sítio
-                                }
-                            }
-                        )
-                        // ----------------------------------------------------------------
-                        // ANIMAÇÕES DE COR E TRANSPARÊNCIA (State-driven Animations)
-                        // Estas variáveis ficam "à escuta" do estado (isBought). Se o estado mudar,
-                        // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
-                        // ----------------------------------------------------------------
-                        val animatedCardColor by animateColorAsState(
-                            targetValue = if (item.isBought) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceVariant,
-                            animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
-                        )
-                        val animatedAlpha by animateFloatAsState(
-                            targetValue = if (item.isBought) 0.4f else 1f, // 0.4f = 40% opaco (bastante transparente)
-                            animationSpec = tween(durationMillis = 500)
-                        )
-                        // Animação para o ícone do lixo crescer.
-                        // Só cresce se a direção do "puxão" tiver ultrapassado o limite (isDismissing == true)
-                        val isDismissing =
-                            dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
-                        val trashScale by animateFloatAsState(
-                            targetValue = if (isDismissing) 1.5f else 1f, // Cresce 50%
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy) // Efeito mola (dá um pequeno salto)
-                        )
-                        // O contentor que permite o deslize
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
-                            backgroundContent = {
-                                // Fundo vermelho que aparece por trás ao deslizar
-                                val color =
-                                    if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
-                                        MaterialTheme.colorScheme.errorContainer
-                                    else
-                                        Color.Transparent
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(color, RoundedCornerShape(20.dp)),
-                                    contentAlignment = Alignment.CenterEnd // Encosta o lixo à direita
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Delete,
-                                        contentDescription = "Apagar",
-                                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(end = 24.dp).size(28.dp)
-                                            .scale(trashScale) // Aplica aqui a animação de tamanho do lixo
-                                    )
-                                }
-                            },
-                            content = {
-                                // CARTÃO VISUAL PRINCIPAL DO ITEM
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(20.dp),
-                                    colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
-                                    // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(
-                                            vertical = 12.dp,
-                                            horizontal = 16.dp
-                                        ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // ------------------------------------------------------------
-                                        // O NOSSO "VISTO" ANIMADO PERSONALIZADO
-                                        // ------------------------------------------------------------
-                                        val checkScale by animateFloatAsState(
-                                            targetValue = if (item.isBought) 1.2f else 1f,
-                                            animationSpec = spring(
-                                                dampingRatio = Spring.DampingRatioHighBouncy, // Mola muito elástica
-                                                stiffness = Spring.StiffnessMedium
-                                            )
-                                        )
-                                        val checkColor by animateColorAsState(
-                                            targetValue = if (item.isBought) MaterialTheme.colorScheme.primary else TextGray
-                                        )
-                                        // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
-                                        Box(
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(CircleShape)
-                                                .clickable {
+                                                // 4. Manda apagar no servidor às escondidas
+                                                client.deleteItem(item.id)
 
-                                                    // vibra ao fazer check
-                                                    vibrator.vibrateHeavy()
 
-                                                    // 1. Criamos a versão atualizada do item com o visto trocado
-                                                    val newState = !item.isBought
-                                                    val updatedItem = item.copy(isBought = newState)
+                                                // 4. Mostra a mensagem e fica à espera de uma ação (Suspende aqui)
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "${item.name} apagado",
+                                                    actionLabel = "Desfazer",
+                                                    duration = SnackbarDuration.Short
+                                                )
 
-                                                    // 2. MAGIA OTIMISTA: Atualizamos a lista local IMEDIATAMENTE!
-                                                    // (A animação vai disparar logo no ecrã, sem atrasos)
-                                                    val index =
-                                                        items.indexOfFirst { it.id == item.id }
-                                                    if (index != -1) {
-                                                        items[index] = updatedItem
-                                                    }
+                                                // 5. Se o utilizador clicou no botão "Desfazer"
+                                                if (result == SnackbarResult.ActionPerformed && !jaDesfez) {
+                                                    jaDesfez = true
+                                                    snackbarHostState.currentSnackbarData?.dismiss() // Fecha logo o pop-up
 
-                                                    // 3. Enviamos para o servidor em background
-                                                    scope.launch {
-                                                        try {
-                                                            client.updateItem(updatedItem)
-                                                            saveToCache()
-                                                            // Quando o servidor responder com REFRESH, a lista vai
-                                                            // recarregar, mas o utilizador nem nota porque já está igual!
-                                                        } catch (e: Exception) {
-                                                            println("Erro de rede: ${e.message}")
-                                                            // 4. Se falhar (sem rede), revertemos a animação
-                                                            if (index != -1) {
-                                                                items[index] =
-                                                                    item // volta a colocar o antigo
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                // Se comprado mostra Visto, se não, mostra Círculo Vazio
-                                                imageVector = if (item.isBought) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-                                                contentDescription = "Comprado",
-                                                tint = checkColor, // Cor animada
-                                                modifier = Modifier.scale(checkScale)
-                                                    .size(28.dp) // Tamanho animado
-                                            )
-                                        }
-                                        // TEXTOS (Nome e Quantidade)
+                                                    // Restaura com um novo ID único (e otimista!)
+                                                    val uniqueId =
+                                                        kotlin.random.Random.nextLong().toString()
+                                                    val itemRestaurado = item.copy(id = uniqueId)
 
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 8.dp)
-                                                .clip(RoundedCornerShape(8.dp)) // Para o efeito de clique ser redondinho
-                                                .clickable {
-                                                    itemToEdit =
-                                                        item // Ao clicar, dizemos à app qual é o item a editar!
+                                                    items.add(itemRestaurado) // Volta a aparecer na lista!
+                                                    saveToCache()
+
+                                                    // Mandamos para o servidor a nova versão
+                                                    client.addItem(itemRestaurado)
                                                 }
-                                                .padding(8.dp)
+                                            } catch (e: Exception) {
+                                                println("Erro: ${e.message}")
+                                                // Se der erro (ex: sem internet), devolvemos o item à lista para não o perder
+                                                if (items.none { it.id == item.id }) {
+                                                    items.add(item)
+                                                }
+                                            }
+                                        }
+                                        true // Diz ao SwipeBox: "Sim, podes avançar com o efeito visual de remover o cartão"
+                                    } else {
+                                        false // Se deslizar para o lado errado, volta a colocar o cartão no sítio
+                                    }
+                                }
+                            )
+                            // ----------------------------------------------------------------
+                            // ANIMAÇÕES DE COR E TRANSPARÊNCIA (State-driven Animations)
+                            // Estas variáveis ficam "à escuta" do estado (isBought). Se o estado mudar,
+                            // em vez de saltarem para o novo valor instantaneamente, fazem uma transição suave.
+                            // ----------------------------------------------------------------
+                            val animatedCardColor by animateColorAsState(
+                                targetValue = if (item.isBought) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceVariant,
+                                animationSpec = tween(durationMillis = 500) // tween = animação com tempo fixo (meio segundo)
+                            )
+                            val animatedAlpha by animateFloatAsState(
+                                targetValue = if (item.isBought) 0.4f else 1f, // 0.4f = 40% opaco (bastante transparente)
+                                animationSpec = tween(durationMillis = 500)
+                            )
+                            // Animação para o ícone do lixo crescer.
+                            // Só cresce se a direção do "puxão" tiver ultrapassado o limite (isDismissing == true)
+                            val isDismissing =
+                                dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
+                            val trashScale by animateFloatAsState(
+                                targetValue = if (isDismissing) 1.5f else 1f, // Cresce 50%
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy) // Efeito mola (dá um pequeno salto)
+                            )
+                            // O contentor que permite o deslize
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
+                                backgroundContent = {
+                                    // Fundo vermelho que aparece por trás ao deslizar
+                                    val color =
+                                        if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
+                                            MaterialTheme.colorScheme.errorContainer
+                                        else
+                                            Color.Transparent
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(color, RoundedCornerShape(20.dp)),
+                                        contentAlignment = Alignment.CenterEnd // Encosta o lixo à direita
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Delete,
+                                            contentDescription = "Apagar",
+                                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                                            modifier = Modifier.padding(end = 24.dp).size(28.dp)
+                                                .scale(trashScale) // Aplica aqui a animação de tamanho do lixo
+                                        )
+                                    }
+                                },
+                                content = {
+                                    // CARTÃO VISUAL PRINCIPAL DO ITEM
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().shadow(
+                                            elevation = if (item.isBought) 0.dp else 16.dp, // 16.dp cria uma sombra bem mais alta e larga
+                                            shape = RoundedCornerShape(20.dp),
+                                            spotColor = Color.Black,    // Força a sombra a ser preta pura
+                                            ambientColor = Color.Black  // Reforça a escuridão à volta do cartão
+                                        ),
+
+                                        shape = RoundedCornerShape(20.dp),
+                                        colors = CardDefaults.cardColors(containerColor = animatedCardColor), // Cor animada
+                                        // Se estiver comprado (isBought), remove a sombra (0.dp), senão tem sombra (8.dp)
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                        border = if (item.isBought) null else BorderStroke(
+                                            1.dp,
+                                            Color.Gray.copy(alpha = 0.2f)
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(
+                                                vertical = 8.dp,
+                                                horizontal = 12.dp
+                                            ),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = item.name,
-                                                style = MaterialTheme.typography.titleMedium.copy(
-                                                    fontWeight = FontWeight.SemiBold
-                                                ),
-                                                textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(
-                                                    alpha = animatedAlpha
+                                            // ------------------------------------------------------------
+                                            // O NOSSO "VISTO" ANIMADO PERSONALIZADO
+                                            // ------------------------------------------------------------
+                                            val checkScale by animateFloatAsState(
+                                                targetValue = if (item.isBought) 1.2f else 1f,
+                                                animationSpec = spring(
+                                                    dampingRatio = Spring.DampingRatioHighBouncy, // Mola muito elástica
+                                                    stiffness = Spring.StiffnessMedium
                                                 )
                                             )
-                                            if (item.quantity > 1) {
+                                            val checkColor by animateColorAsState(
+                                                targetValue = if (item.isBought) MaterialTheme.colorScheme.primary else TextGray
+                                            )
+                                            // Usamos uma Box clicável e redonda em vez de uma Checkbox aborrecida
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .clickable {
+
+                                                        // vibra ao fazer check
+                                                        vibrator.vibrateHeavy()
+
+                                                        // 1. Criamos a versão atualizada do item com o visto trocado
+                                                        val newState = !item.isBought
+                                                        val updatedItem =
+                                                            item.copy(isBought = newState)
+
+                                                        // 2. MAGIA OTIMISTA: Atualizamos a lista local IMEDIATAMENTE!
+                                                        // (A animação vai disparar logo no ecrã, sem atrasos)
+                                                        val index =
+                                                            items.indexOfFirst { it.id == item.id }
+                                                        if (index != -1) {
+                                                            items[index] = updatedItem
+                                                        }
+
+                                                        // 3. Enviamos para o servidor em background
+                                                        scope.launch {
+                                                            try {
+                                                                client.updateItem(updatedItem)
+                                                                saveToCache()
+                                                                // Quando o servidor responder com REFRESH, a lista vai
+                                                                // recarregar, mas o utilizador nem nota porque já está igual!
+                                                            } catch (e: Exception) {
+                                                                println("Erro de rede: ${e.message}")
+                                                                // 4. Se falhar (sem rede), revertemos a animação
+                                                                if (index != -1) {
+                                                                    items[index] =
+                                                                        item // volta a colocar o antigo
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    // Se comprado mostra Visto, se não, mostra Círculo Vazio
+                                                    imageVector = if (item.isBought) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                                    contentDescription = "Comprado",
+                                                    tint = checkColor, // Cor animada
+                                                    modifier = Modifier.scale(checkScale)
+                                                        .size(28.dp) // Tamanho animado
+                                                )
+                                            }
+                                            // TEXTOS (Nome e Quantidade)
+
+                                            Column(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(start = 8.dp)
+                                                    .clip(RoundedCornerShape(8.dp)) // Para o efeito de clique ser redondinho
+                                                    .clickable {
+                                                        itemToEdit =
+                                                            item // Ao clicar, dizemos à app qual é o item a editar!
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                            ) {
                                                 Text(
-                                                    t(
-                                                        "Quantidade: ${item.quantity}",
-                                                        "Ammount: $item.quantity",
-                                                        isPortuguese
+                                                    text = item.name,
+                                                    style = MaterialTheme.typography.titleMedium.copy(
+                                                        fontWeight = FontWeight.SemiBold
                                                     ),
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    textDecoration = if (item.isBought) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                                                     color = MaterialTheme.colorScheme.onSurface.copy(
                                                         alpha = animatedAlpha
                                                     )
                                                 )
+                                                if (item.quantity > 1) {
+                                                    Text(
+                                                        t(
+                                                            "Quantidade: ${item.quantity}",
+                                                            "Ammount: $item.quantity",
+                                                            isPortuguese
+                                                        ),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurface.copy(
+                                                            alpha = animatedAlpha
+                                                        )
+                                                    )
+                                                }
                                             }
-                                        }
-                                        // Botão de Informação à direita
-                                        IconButton(onClick = { itemToShowDetails = item }) {
-                                            Icon(
-                                                Icons.Rounded.Info,
-                                                contentDescription = t(
-                                                    "Detalhes",
-                                                    "Details",
-                                                    isPortuguese
-                                                ),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
+                                            // Botão de Informação à direita
+                                            IconButton(onClick = { itemToShowDetails = item }) {
+                                                Icon(
+                                                    Icons.Rounded.Info,
+                                                    contentDescription = t(
+                                                        "Detalhes",
+                                                        "Details",
+                                                        isPortuguese
+                                                    ),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
