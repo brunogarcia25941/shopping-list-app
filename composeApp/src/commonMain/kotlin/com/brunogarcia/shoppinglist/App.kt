@@ -804,6 +804,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
                         // ANIMAÇÃO DE VISIBILIDADE ---
                         var isVisible by remember { mutableStateOf(false) }
+                        var isDeleted by remember { mutableStateOf(false) }
 
                         // Assim que o cartão entra no ecrã pela primeira vez, ele aparece suavemente
                         LaunchedEffect(Unit) {
@@ -814,6 +815,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         AnimatedVisibility(
                             visible = isVisible,
                             enter = fadeIn(tween(500)) + expandVertically(tween(500)),
+                            modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
                             exit = fadeOut(tween(500)) + shrinkVertically(tween(500))
                         ) {
                             // ----------------------------------------------------------------
@@ -821,7 +823,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                             // ----------------------------------------------------------------
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { dismissValue ->
-                                    if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                    if (dismissValue == SwipeToDismissBoxValue.EndToStart && !isDeleted) {
+
+                                        isDeleted = true
 
                                         vibrator.vibrateHeavy()
 
@@ -845,9 +849,18 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
 
                                                 // 4. Mostra a mensagem e fica à espera de uma ação (Suspende aqui)
+                                                // 4. Mostra a mensagem e fica à espera de uma ação (Suspende aqui)
                                                 val result = snackbarHostState.showSnackbar(
-                                                    message = "${item.name} apagado",
-                                                    actionLabel = "Desfazer",
+                                                    message = t(
+                                                        "${item.name} apagado",
+                                                        "${item.name} deleted",
+                                                        isPortuguese
+                                                    ),
+                                                    actionLabel = t(
+                                                        "Desfazer",
+                                                        "Undo",
+                                                        isPortuguese
+                                                    ),
                                                     duration = SnackbarDuration.Short
                                                 )
 
@@ -905,7 +918,6 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                             // O contentor que permite o deslize
                             SwipeToDismissBox(
                                 state = dismissState,
-                                modifier = Modifier.animateItem(), // Faz com que os cartões de baixo deslizem para cima suavemente quando este é apagado
                                 backgroundContent = {
                                     // Fundo vermelho que aparece por trás ao deslizar
                                     val color =
@@ -1045,7 +1057,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                                     Text(
                                                         t(
                                                             "Quantidade: ${item.quantity}",
-                                                            "Ammount: $item.quantity",
+                                                            "Amount: ${item.quantity}",
                                                             isPortuguese
                                                         ),
                                                         style = MaterialTheme.typography.bodyMedium,
