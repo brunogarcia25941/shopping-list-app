@@ -93,3 +93,8 @@ actual fun rememberWidgetUpdater(): WidgetUpdater {
 }
 
 actual val isWidgetSupported: Boolean = false
+
+@Composable
+actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
+    return { onResult(null) } // No iOS, para já, não faz nada
+}

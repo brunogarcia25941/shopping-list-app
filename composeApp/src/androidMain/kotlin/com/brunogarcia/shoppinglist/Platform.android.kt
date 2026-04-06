@@ -28,6 +28,14 @@ import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
+import androidx.compose.runtime.*
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
@@ -45,8 +53,8 @@ fun AdBanner() {
             AdView(context).apply {
                 setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, screenWidth))
                 // USAR ESTE ID DURANTE O DESENVOLVIMENTO
-                adUnitId = "ca-app-pub-3940256099942544/6300978111"
-                // adUnitId = "ca-app-pub-1817058359358742/2435543601"
+                // adUnitId = "ca-app-pub-3940256099942544/6300978111"
+                adUnitId = "ca-app-pub-1817058359358742/2435543601"
                 loadAd(AdRequest.Builder().build())
             }
         }
@@ -168,3 +176,39 @@ actual fun rememberWidgetUpdater(): WidgetUpdater {
 }
 
 actual val isWidgetSupported: Boolean = true
+
+@Composable
+actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    var tempFile by remember { mutableStateOf<File?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && tempFile != null) {
+            // Lê a foto em ALTA QUALIDADE
+            val bytes = tempFile!!.readBytes()
+            onResult(bytes)
+            tempFile!!.delete() // Apaga o ficheiro temporário para não ocupar memória ao telemóvel
+        } else {
+            onResult(null)
+            tempFile?.delete()
+        }
+    }
+
+    return {
+        // 1. Cria a pasta "images" dentro da cache
+        val imagesDir = File(context.cacheDir, "images").apply { mkdirs() }
+        // 2. Cria um ficheiro em branco
+        val file = File.createTempFile("foto_supermercado_", ".jpg", imagesDir)
+        tempFile = file
+
+        // 3. Pede o "URI Seguro" ao FileProvider para entregar à Câmara da Google/Samsung
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        // 4. Lança a Câmara
+        launcher.launch(uri)
+    }
+}

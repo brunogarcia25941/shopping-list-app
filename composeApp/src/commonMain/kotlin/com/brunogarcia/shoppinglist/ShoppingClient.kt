@@ -5,6 +5,8 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.websocket.* // <--- Importante para WebSockets
 import io.ktor.client.request.*
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.KotlinxSerializationConverter
 import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
@@ -12,6 +14,7 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
 
 
@@ -26,7 +29,11 @@ class ShoppingClient(private val familyCode: String) {
 
     private val client = HttpClient {
         install(ContentNegotiation) {
-            json()
+            json(Json {
+                ignoreUnknownKeys = true
+                prettyPrint = true
+                isLenient = true
+            })
         }
         install(WebSockets){
             pingInterval = 20.seconds // Manda um "Estou vivo" a cada 20 segundos
@@ -94,6 +101,22 @@ class ShoppingClient(private val familyCode: String) {
 
     suspend fun deleteSuggestion(id: String) {
         client.delete("$baseUrl/shopping-list/$familyCode/suggestions/$id")
+    }
+
+    // Verifica qual a versão mínima exigida pelo servidor
+    suspend fun checkMinimumVersion(): Int {
+        return try {
+            val response: HttpResponse = client.get("$baseUrl/api/config")
+
+            // O servidor devolve {"minVersion": 1}. Lemos apenas esse número.
+            val json = response.bodyAsText()
+            val regex = """"minVersion"\s*:\s*(\d+)""".toRegex()
+            val matchResult = regex.find(json)
+            matchResult?.groupValues?.get(1)?.toInt() ?: 1
+        } catch (e: Exception) {
+            // Se falhar a net ou o servidor estiver a dormir, deixamos a pessoa usar a app na mesma (retorna 1)
+            1
+        }
     }
 }
 

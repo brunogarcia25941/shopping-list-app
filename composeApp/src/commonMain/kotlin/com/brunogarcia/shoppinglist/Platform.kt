@@ -27,3 +27,7 @@ expect fun rememberWidgetUpdater(): WidgetUpdater
 
 // Diz-nos se esta plataforma suporta o nosso widget de ecrã principal
 expect val isWidgetSupported: Boolean
+
+// LANÇADOR DA CÂMARA
+@Composable
+expect fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit

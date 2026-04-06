@@ -73,6 +73,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Close
+
 
 // ============================================================================
 // 1. A NOSSA NOVA PALETA DE CORES (Premium Dark Blue)
@@ -127,6 +132,48 @@ fun App() {
             large = RoundedCornerShape(24.dp)
         )
     ) {
+
+        val CURRENT_APP_VERSION = 1
+        var isAppBlocked by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            // Usamos um client temporário (o familyCode vazio não importa para esta rota pública)
+            val minVersion = ShoppingClient("").checkMinimumVersion()
+            if (CURRENT_APP_VERSION < minVersion) {
+                isAppBlocked = true // ACTIVA O BLOQUEIO!
+            }
+        }
+
+        // O ECRÃ DE BLOQUEIO ABSOLUTO
+        if (isAppBlocked) {
+            AlertDialog(
+                onDismissRequest = { /* VAZIO! Impede fechar ao clicar fora */ },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    dismissOnBackPress = false, // Não deixa fechar com o botão de voltar do telemóvel
+                    dismissOnClickOutside = false
+                ),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                titleContentColor = MaterialTheme.colorScheme.primary,
+                title = {
+                    Text("Atualização Obrigatória", fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Text("Esta versão da aplicação já não é suportada devido a melhorias no sistema. Por favor, atualiza a aplicação na Play Store para continuares a fazer as tuas compras em família!", color = MaterialTheme.colorScheme.onSurface)
+                },
+                confirmButton = {
+                    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                    Button(
+                        onClick = {
+                            uriHandler.openUri("https://play.google.com/store/apps/details?id=com.brunogarcia.shoppinglist")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Text("Atualizar Agora", fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+
         if (loggedFamilyCode.isEmpty()) {
             LoginScreen(
                 isPt = isPortuguese,
@@ -241,7 +288,7 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     t(
-                                        "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código verão a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.",
+                                        "O Código da Casa é uma chave secreta partilhada. Inventa um código (ex: SILVA2026) e partilha-o com a tua família. Todos os que usarem este código irão ver a mesma lista!\n\n🍏 Dica: Familiares com iPhone ou PC não precisam instalar a app, basta acederem ao nosso site e usar o mesmo código.",
                                         "The Family Code is a shared secret key. Invent a code (e.g., SMITH2026) and share it with your family. Everyone using this code will see the same list!\n\n🍏 Tip: Family members with an iPhone or PC don't need to install the app, they can just access our website and use the same code.",
                                         isPt
                                     ),
@@ -383,8 +430,44 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
     var showManageSuggestionsDialog by remember { mutableStateOf(false) }
 
-    val categorias = listOf("Supermercado", "Farmácia", "Outros")
-    var selectedCategory by remember { mutableStateOf(categorias.first()) }
+    // Controla o pop-up de Sair
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+
+    // AS CATEGORIAS INTELIGENTES E PERMANENTES
+    val baseCategories = listOf("Supermercado", "Farmácia", "Outros")
+    var customCategoriesStr by remember { mutableStateOf(settings.getString("CUSTOM_CATEGORIES", "")) }
+
+    // as categorias são apenas as de base + as que estão guardadas no telemóvel
+    val categoriasLocais = customCategoriesStr.split(",").filter { it.isNotBlank() }
+    val categorias = (baseCategories + categoriasLocais).distinct()
+
+    var selectedCategory by remember { mutableStateOf(categorias.firstOrNull() ?: "Supermercado") }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+
+    // Para controlar o pop-up de apagar categorias
+    var categoryToDelete by remember { mutableStateOf<String?>(null) }
+
+    // Sempre que a lista de produtos muda, ele verifica se há categorias novas e guarda-as no telemóvel para sempre
+    LaunchedEffect(items.size) {
+        var addedNew = false
+        val currentCustomList = customCategoriesStr.split(",").filter { it.isNotBlank() }.toMutableList()
+
+        items.forEach { item ->
+            val cat = item.category.trim()
+            // Se encontrar uma categoria que não é de base e ainda não está guardada
+            if (cat.isNotBlank() && !baseCategories.contains(cat) && !currentCustomList.contains(cat)) {
+                currentCustomList.add(cat)
+                addedNew = true
+            }
+        }
+
+        // Se aprendeu categorias novas, guarda-as na memória do telemóvel
+        if (addedNew) {
+            val newStr = currentCustomList.joinToString(",")
+            settings.putString("CUSTOM_CATEGORIES", newStr)
+            customCategoriesStr = newStr
+        }
+    }
 
     // CÉREBRO DO PULL-TO-REFRESH
     var isRefreshing by remember { mutableStateOf(false) }
@@ -405,6 +488,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     }
 
     val widgetUpdater = rememberWidgetUpdater()
+
+    // Guarda a posição exata do scroll
+    val listState = rememberLazyListState()
 
     val saveToCache = {
         try {
@@ -602,7 +688,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
 
 
                         // Botão de Sair
-                        IconButton(onClick = onLogout) {
+                        IconButton(onClick = {
+                            showLogoutConfirmDialog = true // abre o pop-up de sair
+                        }) {
                             Icon(Icons.Rounded.ExitToApp, contentDescription = "Sair", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
@@ -650,16 +738,51 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     categorias.forEach { categoria ->
                         Tab(
                             selected = selectedCategory == categoria,
-                            onClick = { selectedCategory = categoria },
+                            onClick = {
+                                // Se for uma categoria personalizada e já estiver selecionada, abre o pop-up de apagar
+                                if (selectedCategory == categoria && !baseCategories.contains(categoria)) {
+                                    categoryToDelete = categoria
+                                } else {
+                                    selectedCategory = categoria
+                                }
+                            },
                             text = {
-                                Text(
-                                    text = tCategory(categoria, isPortuguese),
-                                    fontWeight = if (selectedCategory == categoria) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (selectedCategory == categoria) MaterialTheme.colorScheme.primary else TextGray
-                                )
+                                // Usamos uma Row para poder pôr o texto e o ícone lado a lado
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = tCategory(categoria, isPortuguese),
+                                        fontWeight = if (selectedCategory == categoria) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selectedCategory == categoria) MaterialTheme.colorScheme.primary else TextGray
+                                    )
+
+                                    // Se estiver selecionado E for personalizado, mostramos o 'X'
+                                    if (selectedCategory == categoria && !baseCategories.contains(categoria)) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Apagar",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                             }
                         )
                     }
+                    // BOTÃO +
+                    Tab(
+                        selected = false,
+                        onClick = { showAddCategoryDialog = true },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.Add, contentDescription = "Nova", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(t("Nova", "New", isPortuguese), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    )
 
                 }
             }
@@ -771,6 +894,10 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     .padding(innerPadding)
                     .fillMaxSize()
             ) {
+
+                // PERFORMANCE: Filtrar e ordenar a lista aqui fora
+                val itemsToDisplay = items.filter { it.category == selectedCategory }.sortedBy { it.isBought }
+
                 LazyColumn(
                     modifier = Modifier.padding().fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
@@ -799,17 +926,19 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     // remover, evitando bugs em que apaga o item errado visualmente.
                     // Os itens com isBought = false ficam em cima, isBought = true vão para baixo.
                     items(
-                        items.filter { it.category == selectedCategory }.sortedBy { it.isBought },
-                        key = { it.id }) { item ->
+                        items = itemsToDisplay,
+                        key = { it.id }
+                    ) { item ->
 
                         // ANIMAÇÃO DE VISIBILIDADE ---
-                        var isVisible by remember { mutableStateOf(false) }
+                        //mudar para true e descomentar o launched effect para animacoes do cartao
+                        var isVisible by remember { mutableStateOf(true) }
                         var isDeleted by remember { mutableStateOf(false) }
 
                         // Assim que o cartão entra no ecrã pela primeira vez, ele aparece suavemente
-                        LaunchedEffect(Unit) {
-                            isVisible = true
-                        }
+                        //LaunchedEffect(Unit) {
+                        //    isVisible = true
+                        //}
 
                         // Envolvemos o cartão nesta "Caixa" que sabe encolher e esticar
                         AnimatedVisibility(
@@ -1039,7 +1168,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                                     .clip(RoundedCornerShape(8.dp)) // Para o efeito de clique ser redondinho
                                                     .clickable {
                                                         itemToEdit =
-                                                            item // Ao clicar, dizemos à app qual é o item a editar!
+                                                            item // Ao clicar, dizemos à app qual é o item a editar
                                                     }
                                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                                             ) {
@@ -1065,6 +1194,41 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                                                             alpha = animatedAlpha
                                                         )
                                                     )
+                                                }
+                                                // INDICADORES VISUAIS DE NOTAS E FOTOS
+                                                val hasNotes = !item.notes.isNullOrBlank()
+
+                                                // Esta é uma imagem PNG real de 1x1 pixel, 100% transparente
+                                                val DUMMY_PHOTO = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+                                                val hasPhoto = item.photoBase64 != null &&
+                                                        (item.photoBase64.length > 200 || item.photoBase64 == DUMMY_PHOTO)
+
+
+
+                                                if (hasNotes || hasPhoto) {
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        modifier = Modifier.padding(top = 4.dp)
+                                                    ) {
+                                                        if (hasNotes) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.Description,
+                                                                contentDescription = "Tem notas",
+                                                                // Usa a cor principal, mas fica transparente se já estiver comprado
+                                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = animatedAlpha),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                        if (hasPhoto) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.CameraAlt,
+                                                                contentDescription = "Tem foto",
+                                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = animatedAlpha),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                             // Botão de Informação à direita
@@ -1297,6 +1461,136 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
         )
     }
 
+    // Pop-up de Nova Categoria
+    if (showAddCategoryDialog) {
+        var newCatName by remember { mutableStateOf("") }
+        val focusReq = remember { androidx.compose.ui.focus.FocusRequester() }
+
+        // Puxa o teclado automático quando o pop-up é aberto
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(100)
+            focusReq.requestFocus()
+        }
+
+        AlertDialog(
+            onDismissRequest = { showAddCategoryDialog = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text(t("Nova Categoria", "New Category", isPortuguese), fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newCatName,
+                    onValueChange = { newCatName = it },
+                    label = { Text(t("Nome (ex: Talho)", "Name (ex: Butcher)", isPortuguese)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusReq)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newCatName.isNotBlank()) {
+                            // Limpa espaços extra para evitar bugs
+                            val formattedName = newCatName.trim()
+                            val currentList = customCategoriesStr.split(",").filter { it.isNotBlank() }.toMutableList()
+
+                            // Guarda se ainda não existir nas personalizadas nem nas de base
+                            if (!currentList.contains(formattedName) && !baseCategories.contains(formattedName)) {
+                                currentList.add(formattedName)
+                                val newStr = currentList.joinToString(",")
+                                settings.putString("CUSTOM_CATEGORIES", newStr) // Guarda no telemóvel para sempre
+                                customCategoriesStr = newStr
+                            }
+                            selectedCategory = formattedName // Seleciona magicamente a nova aba
+                            showAddCategoryDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground)
+                ) {
+                    Text(t("Criar", "Create", isPortuguese), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCategoryDialog = false }, colors = ButtonDefaults.textButtonColors(contentColor = TextGray)) {
+                    Text(t("Cancelar", "Cancel", isPortuguese))
+                }
+            }
+        )
+    }
+
+    // Pop-up para APAGAR Categoria
+    if (categoryToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text(t("Apagar Categoria", "Delete Category", isPortuguese), fontWeight = FontWeight.Bold) },
+            text = { Text(t("Queres apagar o separador '${categoryToDelete}'? Os produtos vão continuar na lista, mas ficarão escondidos até criares esta categoria novamente.", "Do you want to delete the tab '${categoryToDelete}'?", isPortuguese)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Apaga a categoria da memória do telemóvel
+                        val currentCustomList = customCategoriesStr.split(",").filter { it.isNotBlank() }.toMutableList()
+                        currentCustomList.remove(categoryToDelete)
+                        val newStr = currentCustomList.joinToString(",")
+                        settings.putString("CUSTOM_CATEGORIES", newStr)
+                        customCategoriesStr = newStr
+
+                        // Volta em segurança para o Supermercado
+                        selectedCategory = "Supermercado"
+                        categoryToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White)
+                ) {
+                    Text(t("Apagar", "Delete", isPortuguese), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToDelete = null }) {
+                    Text(t("Cancelar", "Cancel", isPortuguese), color = TextGray)
+                }
+            }
+        )
+    }
+
+    // Pop-up de Confirmação para Sair da Casa
+    if (showLogoutConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmDialog = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text(t("Sair da Casa", "Leave Home", isPortuguese), fontWeight = FontWeight.Bold) },
+            text = { Text(t("Tens a certeza que queres sair? Vais precisar do Código da Casa para voltar a entrar.", "Are you sure you want to leave? You will need the Family Code to enter again.", isPortuguese)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirmDialog = false
+                        onLogout() // Executa finalmente a saída
+                    },
+                    // Usamos o ErrorRed para avisar que é uma ação destrutiva
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(t("Sair", "Leave", isPortuguese), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmDialog = false }) {
+                    Text(t("Cancelar", "Cancel", isPortuguese), color = TextGray)
+                }
+            }
+        )
+    }
+
 }
 
 // ============================================================================
@@ -1315,6 +1609,16 @@ fun AddItemDialog(
     var name by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
     var saveAsSuggestion by remember { mutableStateOf(false) } // A caixinha de verificação
+
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+
+    // PEDIR O FOCO QUANDO O POP-UP ABRE
+    // pequeno atraso (100ms) para garantir que o pop-up já "nasceu" antes de pedir o foco
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        focusRequester.requestFocus()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1372,7 +1676,7 @@ fun AddItemDialog(
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
                 )
                 // SELETOR DE QUANTIDADE (+ e -)
                 Row(
@@ -1440,12 +1744,23 @@ fun AddItemDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (saveAsSuggestion && name.isNotBlank()) {
-                        onAddSuggestion(name) // Guarda a sugestão na BD
+                    // Só avança se o nome não estiver em branco (segurança extra)
+                    if (name.isNotBlank()) {
+                        if (saveAsSuggestion) {
+                            onAddSuggestion(name) // Guarda a sugestão na BD
+                        }
+                        onConfirm(name, quantity)
                     }
-                    onConfirm(name, quantity)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
+                // O botão desativa-se automaticamente se o nome for vazio
+                enabled = name.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    // Cor quando está desativado (cinzento)
+                    disabledContainerColor = Color.Gray.copy(alpha = 0.3f),
+                    disabledContentColor = Color.Gray
+                ),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Adicionar", "Add", isPt), fontWeight = FontWeight.Bold)
@@ -1470,6 +1785,7 @@ fun EditItemDialog(
     var name by remember { mutableStateOf(item.name) }
     var quantity by remember { mutableStateOf(item.quantity.toString()) }
 
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -1488,7 +1804,10 @@ fun EditItemDialog(
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                         focusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+
                 )
                 // SELETOR DE QUANTIDADE (+ e -)
                 Row(
@@ -1543,8 +1862,17 @@ fun EditItemDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name, quantity) },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground),
+                onClick = {
+                    if (name.isNotBlank()) onConfirm(name, quantity)
+                },
+                // O botão desativa-se se apagarem o nome todo
+                enabled = name.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    disabledContainerColor = Color.Gray.copy(alpha = 0.3f),
+                    disabledContentColor = Color.Gray
+                ),
                 shape = RoundedCornerShape(50)
             ) {
                 Text(t("Guardar", "Save", isPt), fontWeight = FontWeight.Bold)
@@ -1576,15 +1904,26 @@ fun ItemDetailsDialog(
 
     val scope = rememberCoroutineScope()
 
-    // Assim que o pop-up abre, vai sacar a foto verdadeira
+    // Variável que controla a pergunta: Câmara ou Galeria?
+    var showPhotoSourceDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(item.id) {
         val fullItem = onFetchFullItem(item.id)
         photoBase64 = fullItem?.photoBase64
-        isLoadingPhoto = false // Desliga a rodinha
+        isLoadingPhoto = false
     }
 
+    // CÂMARA
+    val cameraLauncher = rememberCameraLauncher { photoBytes ->
+        scope.launch {
+            photoBytes?.let {
+                val compressedBytes = it.compressImage()
+                photoBase64 = Base64.Default.encode(compressedBytes)
+            }
+        }
+    }
 
-    // "apanhador" de imagens
+    // GALERIA
     val singleImagePicker = rememberFilePickerLauncher(
         type = PickerType.Image,
         mode = PickerMode.Single,
@@ -1592,28 +1931,19 @@ fun ItemDetailsDialog(
     ) { file ->
         scope.launch {
             file?.let {
-                // 1. Lê os bytes originais do telemóvel (pesados)
                 val rawBytes = it.readBytes()
-
-                // 2. Passamos pelo compressor
                 val compressedBytes = rawBytes.compressImage()
-
-                // 3. Transformamos a imagem miniatura em texto para o servidor
                 photoBase64 = Base64.Default.encode(compressedBytes)
             }
         }
     }
 
-    // Lemos os bytes fora da interface para evitar o erro do "Try-Catch" no Compose
     val imageBitmap = remember(photoBase64) {
         if (photoBase64 != null) {
             try {
-                // Descodificamos o Base64 e transformamos em Imagem com segurança
                 val bytes = Base64.Default.decode(photoBase64!!)
                 bytes.toImageBitmap()
-            } catch (e: Exception) {
-                null // Se falhar, fica nulo (ex: imagem corrompida)
-            }
+            } catch (e: Exception) { null }
         } else null
     }
 
@@ -1647,7 +1977,7 @@ fun ItemDetailsDialog(
                         .height(200.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.background)
-                        .clickable { singleImagePicker.launch() },
+                        .clickable { showPhotoSourceDialog = true },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingPhoto) {
@@ -1694,6 +2024,39 @@ fun ItemDetailsDialog(
             }
         }
     )
+
+    // O Pop-up da Escolha
+    if (showPhotoSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showPhotoSourceDialog = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            title = { Text(t("Adicionar Foto", "Add Photo", isPt), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+            text = { Text(t("Queres tirar uma foto agora ou escolher da galeria?", "Do you want to take a photo or pick from gallery?", isPt), color = MaterialTheme.colorScheme.onSurface) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPhotoSourceDialog = false
+                        cameraLauncher() // ABRE A CÂMARA
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onBackground)
+                ) {
+                    Icon(Icons.Rounded.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Câmara", "Camera", isPt), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPhotoSourceDialog = false
+                        singleImagePicker.launch() // ABRE A GALERIA
+                    }
+                ) {
+                    Text(t("Galeria", "Gallery", isPt), color = TextGray)
+                }
+            }
+        )
+    }
 }
 
 // Função auxiliar para traduzir o texto

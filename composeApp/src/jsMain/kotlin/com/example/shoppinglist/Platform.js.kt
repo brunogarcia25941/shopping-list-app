@@ -5,3 +5,8 @@ class JsPlatform: Platform {
 }
 
 actual fun getPlatform(): Platform = JsPlatform()
+
+@Composable
+actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
+    return { onResult(null) }
+}
