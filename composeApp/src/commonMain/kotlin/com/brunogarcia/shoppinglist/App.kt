@@ -177,7 +177,7 @@ fun App() {
             showIconReminder = true
         }
 
-        // 2. Detetive da Versão Mínima (Bloqueio)
+        // 2. Detetive da Versão Mínima (Para Bloqueio)
         try {
             val minVersion = ShoppingClient("").checkMinimumVersion()
             if (CURRENT_APP_VERSION < minVersion) {
