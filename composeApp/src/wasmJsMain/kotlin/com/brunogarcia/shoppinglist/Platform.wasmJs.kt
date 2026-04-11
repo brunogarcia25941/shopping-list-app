@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import org.jetbrains.skia.EncodedImageFormat
 import androidx.compose.runtime.remember
 
-
 class WasmPlatform: Platform {
     override val name: String = "Web with Kotlin/Wasm"
 }
@@ -101,3 +100,34 @@ actual val isWidgetSupported: Boolean = false
 actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
     return { onResult(null) }
 }
+
+
+actual fun showRewardedVideo(onRewardEarned: () -> Unit, onAdFailed: () -> Unit) {
+    onAdFailed()
+}
+
+actual fun savePremiumThemeExpiry(expiryTimestamp: Long) {}
+actual fun getPremiumThemeExpiry(): Long = 0L
+
+// --- AS PONTES DIRETAS PARA O JAVASCRIPT ---
+@JsFun("() => Date.now()")
+external fun jsDateNow(): Double
+
+@JsFun("(url) => window.open(url, '_blank')")
+external fun jsWindowOpen(url: String)
+// --------------------------------------------------
+
+actual fun getCurrentTimeMillis(): Long {
+    // Chama a ponte JS e converte para Long
+    return jsDateNow().toLong()
+}
+
+actual fun openPlayStore() {
+    // Chama a ponte JS para abrir o separador
+    jsWindowOpen("https://play.google.com/store/apps/details?id=com.brunogarcia.shoppinglist")
+}
+
+actual fun saveGoldIconProgress(videosWatched: Int) {}
+actual fun getGoldIconProgress(): Int = 0
+actual fun changeAppIcon(isGold: Boolean) {}
+

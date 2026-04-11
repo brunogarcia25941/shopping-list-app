@@ -36,6 +36,19 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.compose.runtime.*
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import java.lang.ref.WeakReference
+import android.content.ComponentName
+import android.content.pm.PackageManager
+import android.content.ActivityNotFoundException
+
+
+// Uma variável global SEGURA que não causa fugas de memória
+var MainContext: WeakReference<Activity>? = null
+
+
+
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
@@ -210,5 +223,112 @@ actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
 
         // 4. Lança a Câmara
         launcher.launch(uri)
+    }
+}
+
+// -----------------
+// ANÚNCIO PARA TEMA PREMIUM
+// -----------------
+
+// Variável global para guardar o anúncio carregado em segundo plano
+private var mRewardedAd: RewardedAd? = null
+
+// Função para pré-carregar o vídeo (chamar isto na MainActivity)
+fun preloadRewardedVideo(context: Context) {
+    val adRequest = AdRequest.Builder().build()
+    // Este é o ID de TESTE da Google para vídeos premiados.
+    // Depois trocar pelo ID Real do AdMob!
+    RewardedAd.load(context, "ca-app-pub-1817058359358742/8314574099", adRequest, object : RewardedAdLoadCallback() {
+        override fun onAdLoaded(ad: RewardedAd) {
+            mRewardedAd = ad
+        }
+    })
+}
+
+// Implementação do expect para MOSTRAR o anúncio
+actual fun showRewardedVideo(onRewardEarned: () -> Unit, onAdFailed: () -> Unit) {
+    val activity = MainContext?.get() ?: return // Precisamos de guardar o contexto (passo abaixo)
+
+    if (mRewardedAd != null) {
+        mRewardedAd?.show(activity as Activity) { rewardItem ->
+            // O UTILIZADOR VIU O VÍDEO ATÉ AO FIM
+            onRewardEarned()
+            // Carrega o próximo vídeo para estar pronto
+            preloadRewardedVideo(activity)
+        }
+    } else {
+        onAdFailed()
+        preloadRewardedVideo(activity) // Tenta carregar outra vez
+    }
+}
+
+// Implementação da Memória (SharedPreferences)
+actual fun savePremiumThemeExpiry(expiryTimestamp: Long) {
+    val context = MainContext?.get() ?: return
+    val prefs = context.getSharedPreferences("PremiumPrefs", Context.MODE_PRIVATE)
+    prefs.edit().putLong("theme_expiry", expiryTimestamp).apply()
+}
+
+actual fun getPremiumThemeExpiry(): Long {
+    val context = MainContext?.get() ?: return 0L
+    val prefs = context.getSharedPreferences("PremiumPrefs", Context.MODE_PRIVATE)
+    return prefs.getLong("theme_expiry", 0L)
+}
+
+// O Android responde com o tempo do sistema ao Platform.kt
+actual fun getCurrentTimeMillis(): Long {
+    return System.currentTimeMillis()
+}
+
+
+// --------------
+// ICONE DESBLOQUEADO POR VIDEO
+// --------------
+
+actual fun saveGoldIconProgress(videosWatched: Int) {
+    val context = MainContext?.get() ?: return
+    context.getSharedPreferences("PremiumPrefs", Context.MODE_PRIVATE)
+        .edit().putInt("gold_icon_progress", videosWatched).apply()
+}
+
+actual fun getGoldIconProgress(): Int {
+    val context = MainContext?.get() ?: return 0
+    return context.getSharedPreferences("PremiumPrefs", Context.MODE_PRIVATE)
+        .getInt("gold_icon_progress", 0)
+}
+
+actual fun changeAppIcon(isGold: Boolean) {
+    val context = MainContext?.get() ?: return
+    val pm = context.packageManager
+
+    // O nome da atividade normal e o nome do "disfarce" Dourado
+    val defaultComponent = ComponentName(context, "com.brunogarcia.shoppinglist.MainActivity")
+    val goldComponent = ComponentName(context, "com.brunogarcia.shoppinglist.MainActivityGold")
+
+    if (isGold) {
+        // Desliga o ícone normal e liga o dourado
+        pm.setComponentEnabledSetting(defaultComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        pm.setComponentEnabledSetting(goldComponent, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+    } else {
+        // Liga o normal e desliga o dourado
+        pm.setComponentEnabledSetting(goldComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        pm.setComponentEnabledSetting(defaultComponent, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+    }
+}
+
+actual fun openPlayStore() {
+    val context = MainContext?.get() ?: return
+    val packageName = context.packageName
+
+    try {
+        // Tenta abrir diretamente na aplicação da Play Store
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        // Se a pessoa não tiver a Play Store instalada, abre no navegador de internet
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
     }
 }

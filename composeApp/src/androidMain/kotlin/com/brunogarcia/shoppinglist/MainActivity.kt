@@ -9,6 +9,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.google.android.gms.ads.MobileAds
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
+import java.lang.ref.WeakReference
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +47,13 @@ class MainActivity : ComponentActivity() {
         if (consentInformation.canRequestAds()) {
             MobileAds.initialize(this) {}
         }
+
+
+        // A Activity apresenta-se à variável global de forma segura
+        MainContext = WeakReference(this)
+
+        // Manda começar a fazer o download dos vídeos publicitários em plano de fundo
+        preloadRewardedVideo(this)
 
         setContent {
             App()

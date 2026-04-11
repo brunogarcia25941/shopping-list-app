@@ -74,13 +74,18 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Close
-
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.ui.text.input.KeyboardCapitalization
 
 // ============================================================================
-// 1. A NOSSA NOVA PALETA DE CORES (Premium Dark Blue)
+// 1. A NOSSA PALETA DE CORES (Premium Dark Blue)
 // ============================================================================
 // Definimos as nossas cores personalizadas usando os códigos HEX.
 val BackgroundNavy = Color(0xFF0B132B)    // Fundo da app (Azul muito escuro)
@@ -105,7 +110,6 @@ fun App() {
         mutableStateOf(settings.getBoolean("IS_DARK_MODE", true))
     }
 
-
     var themeColorName by remember { mutableStateOf(settings.getString("THEME_COLOR", "Ocean")) }
 
     // Variável do Idioma
@@ -120,10 +124,80 @@ fun App() {
         else -> Color(0xFF5BC0BE)        // Ocean (O defeito)
     }
 
-    // 3. Escolhe o esquema de cores com base na variável
-    val baseScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
-    val currentScheme = baseScheme.copy(primary = selectedPrimaryColor)
+    // ============================================================================
+    // LÓGICA DO TEMA PREMIUM (VÍDEO)
+    // ============================================================================
+    val currentTime = getCurrentTimeMillis()
+    var themeExpiry by remember { mutableStateOf(getPremiumThemeExpiry()) }
 
+    val isThemeActive = themeExpiry > currentTime
+    var showRenewalPopup by remember { mutableStateOf(!isThemeActive && themeExpiry > 0L) }
+
+    // ------------------
+    // ICON PREMIUM
+    // ------------------
+    var isGoldIconActive by remember {
+        mutableStateOf(settings.getBoolean("IS_GOLD_ICON_ACTIVE", false))
+    }
+
+    // ESCOLHE O ESQUEMA DE CORES FINAL
+    val currentScheme = if (isThemeActive) {
+        // TEMA PREMIUM DOURADO (Preto Profundo e Ouro)
+        darkColorScheme(
+            primary = Color(0xFFFFD700), // Dourado
+            background = Color(0xFF000000), // Fundo 100% Preto (OLED)
+            surface = Color(0xFF121212),
+            surfaceVariant = Color(0xFF1E1E1E), // Cartões escuros
+            onPrimary = Color.Black,
+            onBackground = Color.White,
+            onSurface = Color.White,
+            errorContainer = ErrorRed
+        )
+    } else {
+        // O TEMA NORMAL DA APP
+        val baseScheme = if (isDarkTheme) ModernDarkBlueScheme else ModernLightScheme
+        baseScheme.copy(primary = selectedPrimaryColor)
+    }
+
+    // ============================================================================
+    // OS NOSSOS DETETIVES E LÓGICAS (OS CÉREBROS DA APP)
+    // ============================================================================
+    var showIconReminder by remember { mutableStateOf(false) }
+
+    val CURRENT_APP_VERSION = 1
+    var isAppBlocked by remember { mutableStateOf(false) }
+    var showPatchNotes by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // 1. Detetive de Aberturas (Ícone Dourado)
+        val currentOpens = settings.getInt("APP_OPENS", 0) + 1
+        settings.putInt("APP_OPENS", currentOpens)
+
+        if (currentOpens % 6 == 0 && getGoldIconProgress() < 5) {
+            showIconReminder = true
+        }
+
+        // 2. Detetive da Versão Mínima (Bloqueio)
+        try {
+            val minVersion = ShoppingClient("").checkMinimumVersion()
+            if (CURRENT_APP_VERSION < minVersion) {
+                isAppBlocked = true
+            }
+        } catch (e: Exception) { /* Ignora se não houver net */ }
+
+        // 3. Detetive das Patch Notes (Notas de Atualização)
+        val lastVersionSeen = settings.getInt("LAST_VERSION_SEEN", 0)
+        val isAndroid = getPlatform().name.contains("Android", ignoreCase = true)
+
+        if (isAndroid && lastVersionSeen < CURRENT_APP_VERSION && !isAppBlocked) {
+            showPatchNotes = true
+        }
+    }
+
+
+    // ============================================================================
+    // O DESENHO DA APP (OS MÚSCULOS)
+    // ============================================================================
     MaterialTheme(
         colorScheme = currentScheme,
         shapes = Shapes(
@@ -132,19 +206,70 @@ fun App() {
             large = RoundedCornerShape(24.dp)
         )
     ) {
+        // ==========================================
+        // OS NOSSOS POP-UPS GLOBAIS
+        // ==========================================
 
-        val CURRENT_APP_VERSION = 1
-        var isAppBlocked by remember { mutableStateOf(false) }
-
-        LaunchedEffect(Unit) {
-            // Usamos um client temporário (o familyCode vazio não importa para esta rota pública)
-            val minVersion = ShoppingClient("").checkMinimumVersion()
-            if (CURRENT_APP_VERSION < minVersion) {
-                isAppBlocked = true // ACTIVA O BLOQUEIO!
-            }
+        // 1. POP-UP DE RENOVAÇÃO AUTOMÁTICA
+        if (showRenewalPopup) {
+            AlertDialog(
+                onDismissRequest = {
+                    showRenewalPopup = false
+                    savePremiumThemeExpiry(0L) // Limpa a memória para não voltar a chatear
+                },
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                titleContentColor = MaterialTheme.colorScheme.primary,
+                textContentColor = MaterialTheme.colorScheme.onSurface,
+                title = {
+                    Text(t("O Tema Premium expirou! ⏳", "Premium Theme expired! ⏳", isPortuguese), fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Text(t("A tua semana de Tema Dourado terminou. Queres ver um vídeo rápido para o ativar durante mais 7 dias?", "Your Gold Theme week has ended. Want to watch a quick video to activate it for another 7 days?", isPortuguese))
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        showRewardedVideo(
+                            onRewardEarned = {
+                                val sevenDaysMillis = 7L * 24 * 60 * 60 * 1000
+                                val newExpiry = getCurrentTimeMillis() + sevenDaysMillis
+                                savePremiumThemeExpiry(newExpiry)
+                                themeExpiry = newExpiry
+                                showRenewalPopup = false
+                            },
+                            onAdFailed = {
+                                showRenewalPopup = false
+                                savePremiumThemeExpiry(0L)
+                            }
+                        )
+                    },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+                    ) {
+                        Text(t("Ver Vídeo e Renovar", "Watch Video & Renew", isPortuguese), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showRenewalPopup = false
+                        savePremiumThemeExpiry(0L)
+                    }) {
+                        Text(t("Agora não", "Not now", isPortuguese), color = TextGray)
+                    }
+                }
+            )
         }
 
-        // O ECRÃ DE BLOQUEIO ABSOLUTO
+        // 2. POP-UP DAS NOTAS DE ATUALIZAÇÃO
+        if (showPatchNotes) {
+            PatchNotesDialog(
+                isPt = isPortuguese,
+                onDismiss = {
+                    settings.putInt("LAST_VERSION_SEEN", CURRENT_APP_VERSION)
+                    showPatchNotes = false
+                }
+            )
+        }
+
+        // 3. O ECRÃ DE BLOQUEIO ABSOLUTO
         if (isAppBlocked) {
             AlertDialog(
                 onDismissRequest = { /* VAZIO! Impede fechar ao clicar fora */ },
@@ -174,12 +299,15 @@ fun App() {
             )
         }
 
+        // ==========================================
+        // NAVEGAÇÃO PRINCIPAL DA APP
+        // ==========================================
         if (loggedFamilyCode.isEmpty()) {
             LoginScreen(
                 isPt = isPortuguese,
                 onLanguageChange = { newState ->
                     isPortuguese = newState
-                    settings.putBoolean("IS_PT", newState) // Guarda o idioma
+                    settings.putBoolean("IS_PT", newState)
                 },
                 onEnter = { code ->
                     loggedFamilyCode = code
@@ -187,31 +315,40 @@ fun App() {
                 }
             )
         } else {
-            // Passamos o tema e a função de mudar o tema para o ecrã da lista
             ShoppingListScreen(
                 familyCode = loggedFamilyCode,
+                showIconReminder = showIconReminder,
+                onDismissReminder = { showIconReminder = false },
                 isDarkTheme = isDarkTheme,
-
+                isPremiumActive = isThemeActive,
+                isGoldIconActive = isGoldIconActive,
+                onGoldIconToggle = { isActive ->
+                    isGoldIconActive = isActive
+                    settings.putBoolean("IS_GOLD_ICON_ACTIVE", isActive)
+                },
                 onToggleTheme = {
                     val newState = !isDarkTheme
                     isDarkTheme = newState
-                    settings.putBoolean("IS_DARK_MODE", newState) // Guarda na memória
+                    settings.putBoolean("IS_DARK_MODE", newState)
                 },
                 isPortuguese = isPortuguese,
                 onLanguageChange = { newState ->
-                    isPortuguese = newState // Muda a variável
-                    settings.putBoolean("IS_PT", newState) // Guarda na memória local
+                    isPortuguese = newState
+                    settings.putBoolean("IS_PT", newState)
                 },
                 themeColorName = themeColorName,
                 onThemeColorChange = { newColor ->
                     themeColorName = newColor
-                    settings.putString("THEME_COLOR", newColor) // Guarda na memória local
+                    settings.putString("THEME_COLOR", newColor)
                 },
                 onLogout = {
                     settings.remove("CACHE_ITEMS_$loggedFamilyCode")
                     settings.remove("CACHE_SUGS_$loggedFamilyCode")
                     settings.remove("FAMILY_CODE")
                     loggedFamilyCode = ""
+                },
+                onPremiumUnlocked = { newExpiryTempo ->
+                    themeExpiry = newExpiryTempo
                 }
             )
         }
@@ -254,7 +391,11 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding() // Isto empurra o ecrã para cima quando o teclado aparece
+                        .verticalScroll(rememberScrollState()) // Isto permite deslizar com o dedo caso o ecrã seja pequeno
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -315,7 +456,7 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                     OutlinedTextField(
                         value = codeInput,
                         // Tira espaços e põe tudo em maiúsculas automaticamente
-                        onValueChange = { codeInput = it.uppercase().replace(" ", "") },
+                        onValueChange = { codeInput = it},
                         label = { Text(t("Código da Casa", "Family Code", isPt)) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -324,13 +465,17 @@ fun LoginScreen(isPt: Boolean, onLanguageChange: (Boolean) -> Unit, onEnter: (St
                             focusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     // --- 5. O BOTÃO DE ENTRAR ---
                     Button(
                         onClick = {
-                            if (codeInput.isNotBlank()) onEnter(codeInput)
+                            val finalCode = codeInput.trim().uppercase()
+                            if (finalCode.isNotBlank()) onEnter(finalCode)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
@@ -386,7 +531,11 @@ private val ModernLightScheme = lightColorScheme(
 // O @OptIn avisa o compilador que estamos a usar ferramentas "novas" do Compose que ainda estão em fase experimental.
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: Boolean, onLanguageChange: (Boolean) -> Unit, onToggleTheme: () -> Unit, themeColorName: String, onThemeColorChange: (String) -> Unit, onLogout: () -> Unit) {
+fun ShoppingListScreen(familyCode: String,showIconReminder: Boolean,
+                       onDismissReminder: () -> Unit,
+                       isDarkTheme: Boolean, isPremiumActive: Boolean, isGoldIconActive: Boolean,
+                       onGoldIconToggle: (Boolean) -> Unit, isPortuguese: Boolean, onLanguageChange: (Boolean) -> Unit, onToggleTheme: () -> Unit, themeColorName: String, onThemeColorChange: (String) -> Unit, onLogout: () -> Unit,
+                       onPremiumUnlocked: (Long) -> Unit) {
     // ------------------------------------------------------------------------
     // GESTÃO DE ESTADO (State Management)
     // O 'remember' faz com que a variável não perca o seu valor quando o ecrã se redesenha (recomposição).
@@ -447,6 +596,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     // Para controlar o pop-up de apagar categorias
     var categoryToDelete by remember { mutableStateOf<String?>(null) }
 
+    var showShareDialog by remember { mutableStateOf(false) }
+
     // Sempre que a lista de produtos muda, ele verifica se há categorias novas e guarda-as no telemóvel para sempre
     LaunchedEffect(items.size) {
         var addedNew = false
@@ -502,6 +653,35 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             widgetUpdater.update()
         } catch (e: Exception) { println("Erro ao guardar cache: ${e.message}") }
     }
+
+    // ==========================================
+    // LÓGICA DE AVALIAÇÃO DA APP (3 EM 3 DIAS)
+    // ==========================================
+    var hasRatedApp by remember { mutableStateOf(settings.getBoolean("HAS_RATED", false)) }
+
+    // Se for a primeira vez, guarda o dia de hoje. Se não, lê a data guardada.
+    var lastRatingPromptTime by remember {
+        mutableStateOf(
+            if (settings.hasKey("LAST_RATING_TIME")) {
+                settings.getLong("LAST_RATING_TIME", 0L)
+            } else {
+                val now = getCurrentTimeMillis()
+                settings.putLong("LAST_RATING_TIME", now)
+                now
+            }
+        )
+    }
+
+    // Calcula se já passaram 3 dias (3 dias * 24h * 60m * 60s * 1000ms)
+    val threeDaysInMillis = 3L * 24 * 60 * 60 * 1000
+    // Para testar, usar 10 segundos:
+    // val threeDaysInMillis = 10000L
+
+    var showRatingDialog by remember {
+        mutableStateOf(!hasRatedApp && (getCurrentTimeMillis() - lastRatingPromptTime > threeDaysInMillis))
+    }
+
+
 
     // ------------------------------------------------------------------------
     // CICLO DE VIDA E WEBSOCKETS
@@ -658,12 +838,7 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                     ),
                     actions = {
 
-                        IconButton(onClick = {
-                            // 1. Cria a mensagem
-                            val mensagem = formatShoppingList(items, isPortuguese, familyCode)
-                            // 2. Chama o ecrã de partilha do telemóvel
-                            shareManager.shareText(mensagem)
-                        }) {
+                        IconButton(onClick = { showShareDialog = true }) {
                             Icon(
                                 imageVector = Icons.Rounded.Share,
                                 contentDescription = t("Partilhar", "Share", isPortuguese),
@@ -695,6 +870,60 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                         }
                     }
                 )
+
+                // ==================================================
+                // BARRA DE NOTIFICAÇÃO DO ÍCONE DOURADO
+                // ==================================================
+                AnimatedVisibility(
+                    visible = showIconReminder,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFD700).copy(alpha = 0.15f) // Fundo dourado super suave
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Star, contentDescription = null, tint = Color(0xFFFFD700))
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    t("Ícone Dourado à tua espera!", "Gold Icon waiting for you!", isPortuguese),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    t("Desbloqueia-o nas definições. 🏆", "Unlock it in the settings. 🏆", isPortuguese),
+                                    color = TextGray,
+                                    fontSize = 12.sp
+                                )
+                            }
+
+                            // Botão para ir direto para as Definições
+                            TextButton(onClick = {
+                                onDismissReminder() // 1. Avisa o App() para esconder a barra
+                                showSettingsDialog = true // 2. Abre as definições
+                            }) {
+                                Text(t("Ver", "View", isPortuguese), color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                            }
+
+                            // Botão para fechar a notificação
+                            IconButton(onClick = onDismissReminder, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Rounded.Close, contentDescription = "Fechar", tint = TextGray)
+                            }
+                        }
+                    }
+                }
 
                 val itemsDaCategoria = items.filter { it.category == selectedCategory }
 
@@ -1417,6 +1646,9 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
     if (showSettingsDialog) {
         SettingsDialog(
             isDarkTheme = isDarkTheme,
+            isPremiumActive = isPremiumActive,
+            isGoldIconActive = isGoldIconActive,
+            onGoldIconToggle = onGoldIconToggle,
             onThemeChange = { onToggleTheme() }, // Chama a função que veio por parâmetro
             isPt = isPortuguese,
             onLanguageChange = onLanguageChange, // Passa a função que veio por parâmetro!
@@ -1427,6 +1659,8 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
                 showSettingsDialog = false
                 showManageSuggestionsDialog = true
             },
+
+            onPremiumUnlocked = { tempo -> onPremiumUnlocked(tempo) },
 
             onDismiss = { showSettingsDialog = false } // Aqui podes mudar, porque é local
         )
@@ -1590,6 +1824,42 @@ fun ShoppingListScreen(familyCode: String, isDarkTheme: Boolean, isPortuguese: B
             }
         )
     }
+    // Pop-up do Centro de Partilha
+    if (showShareDialog) {
+        ShareOptionsDialog(
+            isPt = isPortuguese,
+            familyCode = familyCode,
+            items = items,
+            onDismiss = { showShareDialog = false },
+            onShare = { texto ->
+                shareManager.shareText(texto)
+                showShareDialog = false
+            }
+        )
+    }
+
+    // Pop-up de Avaliação na Loja
+    if (showRatingDialog) {
+        RatingDialog(
+            isPt = isPortuguese,
+            onDismiss = {
+                // Clicou em "Mais Tarde" -> Reinicia o relógio para daqui a 3 dias
+                val now = getCurrentTimeMillis()
+                settings.putLong("LAST_RATING_TIME", now)
+                lastRatingPromptTime = now
+                showRatingDialog = false
+            },
+            onRateNow = {
+                // Clicou em "Avaliar" -> Abre a loja e NUNCA MAIS aparece
+                settings.putBoolean("HAS_RATED", true)
+                hasRatedApp = true
+                showRatingDialog = false
+                openPlayStore()
+            }
+        )
+    }
+
+
 
 }
 
@@ -2077,6 +2347,9 @@ fun tCategory(categoria: String, isPt: Boolean): String {
 @Composable
 fun SettingsDialog(
     isDarkTheme: Boolean,
+    isPremiumActive: Boolean,
+    isGoldIconActive: Boolean,
+    onGoldIconToggle: (Boolean) -> Unit,
     onThemeChange: (Boolean) -> Unit,
     isPt: Boolean,
     onLanguageChange: (Boolean) -> Unit,
@@ -2085,6 +2358,9 @@ fun SettingsDialog(
     themeColorName: String,
     onThemeColorChange: (String) -> Unit,
     onOpenManageSuggestions: () -> Unit,
+
+    onPremiumUnlocked: (Long) -> Unit,
+
     onDismiss: () -> Unit
 ) {
     // Traz o gestor de links do Android/iOS/Web
@@ -2102,7 +2378,12 @@ fun SettingsDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
 
                 // 1. Linha do Tema Claro/Escuro
 
@@ -2111,6 +2392,139 @@ fun SettingsDialog(
                     Spacer(Modifier.width(12.dp))
                     Text(t("Tema Escuro", "Dark Theme", isPt), modifier = Modifier.weight(1f))
                     Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
+
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+
+
+                // ==========================================
+                // LÓGICA DO TEMA DOURADO (ATIVAR / DESATIVAR)
+                // ==========================================
+                if (isPremiumActive) {
+                    // SE JÁ TEM O TEMA: Mostra o botão para desligar
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            savePremiumThemeExpiry(0L) // Apaga a memória
+                            onPremiumUnlocked(0L)      // Avisa a App para mudar de cor imediatamente
+                            onDismiss()
+                        }.padding(vertical = 8.dp)
+                    ) {
+                        // Ícone sem preenchimento para indicar "Desativar"
+                        Icon(Icons.Rounded.Star, contentDescription = null, tint = TextGray.copy(alpha = 0.5f))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            t("Desativar Tema Dourado", "Disable Gold Theme", isPt),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    // SE NÃO TEM O TEMA: Mostra o botão de ver o vídeo
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showRewardedVideo(
+                                onRewardEarned = {
+                                    val sevenDaysMillis = 7L * 24 * 60 * 60 * 1000
+                                    val newExpiry = getCurrentTimeMillis() + sevenDaysMillis
+                                    savePremiumThemeExpiry(newExpiry)
+                                    onPremiumUnlocked(newExpiry)
+                                    onDismiss()
+                                },
+                                onAdFailed = { /* Erro ao carregar anúncio */ }
+                            )
+                        }.padding(vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Rounded.Star, contentDescription = null, tint = Color(0xFFFFD700)) // Estrela Dourada
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            t("Tema Dourado Premium (Ver Anúncio)", "Premium Gold Theme (Watch Ad)", isPt),
+                            color = Color(0xFFFFD700),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // ==========================================
+                // COFRE DO ÍCONE DOURADO
+                // ==========================================
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                var iconProgress by remember { mutableStateOf(getGoldIconProgress()) }
+                val isIconUnlocked = iconProgress >= 5
+
+                if (!isIconUnlocked) {
+                    // ESTADO 1: AINDA NÃO DESBLOQUEOU (Mostra os vídeos)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showRewardedVideo(
+                                onRewardEarned = {
+                                    val newProgress = iconProgress + 1
+                                    saveGoldIconProgress(newProgress)
+                                    iconProgress = newProgress
+
+                                    // Se acabou de chegar aos 5 agora, muda o ícone!
+                                    if (newProgress == 5) {
+                                        changeAppIcon(isGold = true)
+                                        onGoldIconToggle(true)
+                                    }
+                                },
+                                onAdFailed = { /* Erro ao carregar anúncio */ }
+                            )
+                        }.padding(vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Rounded.Star, contentDescription = null, tint = TextGray)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                t("Ícone de App Dourado", "Gold App Icon", isPt),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                t("Vê 5 vídeos para desbloquear para sempre (${iconProgress}/5) (A Aplicação irá reiniciar após o 5º vídeo)", "Watch 5 videos to unlock forever (${iconProgress}/5) (The app will reset after the 5th video", isPt),
+                                fontSize = 12.sp, color = TextGray
+                            )
+                        }
+                    }
+                } else {
+                    // ESTADO 2: JÁ ESTÁ DESBLOQUEADO (Botão para Ligar/Desligar)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            // Inverte o estado (Se estava ligado, desliga. Se estava desligado, liga)
+                            val newState = !isGoldIconActive
+                            changeAppIcon(isGold = newState)
+                            onGoldIconToggle(newState)
+                        }.padding(vertical = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = if (isGoldIconActive) Color(0xFFFFD700) else TextGray.copy(alpha = 0.5f)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                t("Ícone de App Dourado", "Gold App Icon", isPt),
+                                color = if (isGoldIconActive) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (isGoldIconActive)
+                                    t("Ativo. Clica para voltar ao normal. (A app irá fechar para aplicar as alterações)", "Active. Click to revert to default. (The app will crash automatically to update the icon)", isPt)
+                                else
+                                    t("Desativado. Clica para usar o ícone dourado. (A app irá fechar para aplicar as alterações)", "Disabled. Click to use gold icon. (The app will crash automatically to update the icon)", isPt),
+                                fontSize = 12.sp,
+                                color = if (isGoldIconActive) Color(0xFFFFD700).copy(alpha = 0.8f) else TextGray
+                            )
+                        }
+                    }
                 }
 
                 Divider(color = TextGray.copy(alpha = 0.2f))
@@ -2135,13 +2549,13 @@ fun SettingsDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
-                    // A nossa lista de cores com os respetivos códigos
+                    // lista de cores com os respetivos códigos
                     val colorOptions = listOf(
-                        "Ocean" to Color(0xFF5BC0BE),
-                        "Forest" to Color(0xFF4CAF50),
-                        "Sunset" to Color(0xFFFF9800),
-                        "Amethyst" to Color(0xFF9C27B0),
-                        "Rose" to Color(0xFFE91E63)
+                        "Ocean" to Color(0xFF5BC0BE),    // GRÁTIS
+                        "Forest" to Color(0xFF4CAF50),   // PREMIUM
+                        "Sunset" to Color(0xFFFF9800),   // PREMIUM
+                        "Amethyst" to Color(0xFF9C27B0), // PREMIUM
+                        "Rose" to Color(0xFFE91E63)      // PREMIUM
                     )
 
                     colorOptions.forEach { (name, color) ->
@@ -2152,7 +2566,26 @@ fun SettingsDialog(
                                 .size(40.dp) // Tamanho da bolinha
                                 .clip(CircleShape)
                                 .background(color)
-                                .clickable { onThemeColorChange(name) }
+                                .clickable {
+                                    // ==========================================
+                                    // LÓGICA DO CLIQUE E DO ANÚNCIO
+                                    // ==========================================
+                                    if (name == "Ocean" || isSelected) {
+                                        // Se for a cor grátis ou a que já está escolhida, muda logo sem anúncios
+                                        onThemeColorChange(name)
+                                    } else {
+                                        // Se for uma cor Premium diferente, obriga a ver o vídeo!
+                                        showRewardedVideo(
+                                            onRewardEarned = {
+                                                // Só muda a cor se a pessoa vir o anúncio até ao fim
+                                                onThemeColorChange(name)
+                                            },
+                                            onAdFailed = {
+                                                // Opcional: Se a Google falhar em dar o anúncio, não faz nada
+                                            }
+                                        )
+                                    }
+                                }
                                 // Desenha um anel branco à volta se estiver selecionado
                                 .border(
                                     width = if (isSelected) 3.dp else 0.dp,
@@ -2161,9 +2594,15 @@ fun SettingsDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            // Põe um vistozinho na cor que está ativa
+                            // ==========================================
+                            // MAGIA VISUAL (Ícones dentro das bolinhas)
+                            // ==========================================
                             if (isSelected) {
+                                // Põe um vistozinho na cor que está ativa (seja ela grátis ou premium)
                                 Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            } else if (name != "Ocean") {
+                                // Se a cor NÃO estiver ativa e NÃO for a Ocean (ou seja, é Premium bloqueada), põe o ícone de Play
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = "Desbloquear", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -2373,6 +2812,187 @@ fun formatShoppingList(items: List<ShoppingItem>, isPt: Boolean, familyCode: Str
 
     return sb.toString()
 }
+
+@Composable
+fun ShareOptionsDialog(
+    isPt: Boolean,
+    familyCode: String,
+    items: List<ShoppingItem>,
+    onDismiss: () -> Unit,
+    onShare: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = MaterialTheme.colorScheme.primary,
+        title = { Text(t("Partilhar", "Share", isPt), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+
+                // ----------------------------------------------------
+                // OPÇÃO 1: PARTILHAR A LISTA DE COMPRAS
+                // ----------------------------------------------------
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val msg = formatShoppingList(items, isPt, familyCode)
+                        onShare(msg)
+                    }.padding(vertical = 12.dp)
+                ) {
+                    Icon(Icons.Rounded.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(t("Lista de Compras", "Shopping List", isPt), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                        Text(t("Envie a lista de produtos atual", "Send the current list of items", isPt), color = TextGray, fontSize = 12.sp)
+                    }
+                }
+
+                Divider(color = TextGray.copy(alpha = 0.2f))
+
+                // ----------------------------------------------------
+                // OPÇÃO 2: CONVIDAR FAMILIAR (O Growth Hack!)
+                // ----------------------------------------------------
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val msgPt = "Olha, instalei esta app gratuita para organizarmos as compras lá de casa juntos! 🛒✨\n\n1. Instala a app aqui: https://play.google.com/store/apps/details?id=com.brunogarcia.shoppinglist\n2. Na entrada, usa o nosso Código de Família: $familyCode\n\n(Se usares iPhone ou PC, basta acederes a https://family-shopping-list-maoz.onrender.com e pôr o código!)"
+
+                        val msgEn = "Hey, I installed this free app so we can organize our groceries together! 🛒✨\n\n1. Install the app here: https://play.google.com/store/apps/details?id=com.brunogarcia.shoppinglist\n2. At the login, use our Family Code: $familyCode\n\n(If you use an iPhone or PC, just go to https://family-shopping-list-maoz.onrender.com and type the code!)"
+
+                        onShare(if (isPt) msgPt else msgEn)
+                    }.padding(vertical = 12.dp)
+                ) {
+                    Icon(Icons.Rounded.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(t("Convidar Familiar", "Invite Family Member", isPt), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                        Text(t("Envia o código e link da app", "Send the code and app link", isPt), color = TextGray, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(t("Cancelar", "Cancel", isPt), color = TextGray)
+            }
+        }
+    )
+}
+
+
+@Composable
+fun RatingDialog(
+    isPt: Boolean,
+    onDismiss: () -> Unit,
+    onRateNow: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = MaterialTheme.colorScheme.primary,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Star, contentDescription = null, tint = Color(0xFFFFD700))
+                Spacer(Modifier.width(8.dp))
+                Text(t("Estás a gostar?", "Enjoying the app?", isPt), fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Text(t("Esta Lista de Compras é feita com muito carinho por um programador independente. Se está a ser útil para a tua família, uma avaliação de 5 estrelas ajuda-me imenso a crescer! 🚀",
+                "This Shopping List is built with love by an indie developer. If it's being useful for your family, a 5-star review helps me grow immensely! 🚀", isPt))
+        },
+        confirmButton = {
+            Button(
+                onClick = onRateNow,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+            ) {
+                Text(t("Avaliar Agora ⭐", "Rate Now ⭐", isPt), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(t("Mais tarde", "Later", isPt), color = TextGray)
+            }
+        }
+    )
+}
+
+
+// ------------------------------------
+// PATCH NOTES
+// ------------------------------------
+@Composable
+fun PatchNotesDialog(
+    isPt: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        titleContentColor = MaterialTheme.colorScheme.primary,
+        textContentColor = MaterialTheme.colorScheme.onSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🎉 ", fontSize = 24.sp)
+                Text(t("Novidades da Versão!", "What's New!", isPt), fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    t("Trazemos funcionalidades incríveis para ti e para a tua família:", "We bring amazing new features for you and your family:", isPt),
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Novidade 1
+                Row {
+                    Text("🎨 ", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Cores Premium: Personaliza a tua app com paletas de cores exclusivas.", "Premium Colors: Customize your app with exclusive color palettes.", isPt), fontSize = 14.sp)
+                }
+
+                // Novidade 2
+                Row {
+                    Text("🏆 ", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Ícone Dourado: Vê vídeos para desbloquear um ícone VIP dourado permanente na tua app.", "Gold Icon: Watch videos to unlock a permanent golden VIP icon for your app.", isPt), fontSize = 14.sp)
+                }
+
+                // Novidade 3
+                Row {
+                    Text("🚀 ", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Convites Rápidos: Usa o botão de partilha para convidares a tua familia em segundos.", "Quick Invites: Use the share button to invite family members in seconds.", isPt), fontSize = 14.sp)
+                }
+
+                // Novidade 4
+                Row {
+                    Text("✨ ", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Tema Premium: Desbloqueia temporariamente o Tema Dourado Escuro de luxo!", "Premium Theme: Temporarily unlock the luxury Dark Gold Theme!", isPt), fontSize = 14.sp)
+                }
+
+                // Novidade 5
+                Row {
+                    Text("🐛 ", fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Correção de bugs e melhorias", "Quality of Live improvements", isPt), fontSize = 14.sp)
+                }
+
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+            ) {
+                Text(t("Fantástico!", "Awesome!", isPt), fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
 
 
 expect @Composable fun AdBanner()

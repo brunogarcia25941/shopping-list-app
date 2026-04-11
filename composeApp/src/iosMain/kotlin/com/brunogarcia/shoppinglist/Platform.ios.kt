@@ -9,8 +9,17 @@ import org.jetbrains.skia.EncodedImageFormat
 import platform.UIKit.UIImpactFeedbackGenerator
 import platform.UIKit.UIImpactFeedbackStyle
 import androidx.compose.runtime.remember
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
+import platform.Foundation.NSURL
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import platform.posix.gettimeofday
+import platform.posix.timeval
+
+
 class IOSPlatform: Platform {
     override val name: String = UIDevice.currentDevice.systemName() + " " + UIDevice.currentDevice.systemVersion
 }
@@ -97,4 +106,36 @@ actual val isWidgetSupported: Boolean = false
 @Composable
 actual fun rememberCameraLauncher(onResult: (ByteArray?) -> Unit): () -> Unit {
     return { onResult(null) } // No iOS, para já, não faz nada
+}
+
+
+
+actual fun showRewardedVideo(onRewardEarned: () -> Unit, onAdFailed: () -> Unit) {
+    // Como não temos AdMob no iOS configurado, dá sempre falha
+    onAdFailed()
+}
+
+actual fun savePremiumThemeExpiry(expiryTimestamp: Long) { /* Por fazer no iOS */ }
+actual fun getPremiumThemeExpiry(): Long = 0L
+
+// No iOS, as horas calculam-se de maneira diferente
+@OptIn(ExperimentalForeignApi::class)
+actual fun getCurrentTimeMillis(): Long {
+    // Falamos diretamente com o relógio do processador do iPhone
+    return memScoped {
+        val tv = alloc<timeval>()
+        gettimeofday(tv.ptr, null)
+        (tv.tv_sec * 1000L) + (tv.tv_usec / 1000L)
+    }
+}
+
+actual fun saveGoldIconProgress(videosWatched: Int) { /* Por fazer no iOS */ }
+actual fun getGoldIconProgress(): Int = 0
+actual fun changeAppIcon(isGold: Boolean) { /* Por fazer no iOS */ }
+
+actual fun openPlayStore() {
+    // No futuro mudar para o link da App Store da Apple
+    val url = NSURL(string = "https://apps.apple.com/")
+    // O !! é obrigatório aqui porque o NSURL pode ser nulo
+    UIApplication.sharedApplication.openURL(url!!)
 }
